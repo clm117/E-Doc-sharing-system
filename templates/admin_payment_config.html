@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>支付配置 - 后台管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background-color: #007bff;
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .btn-success {
+            background-color: #28a745;
+        }
+        
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status-active {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .status-inactive {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .amount {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .back-link {
+            display: inline-block;
+            color: #007bff;
+            text-decoration: none;
+            margin-top: 20px;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 5px;
+            width: 90%;
+            max-width: 600px;
+            position: relative;
+        }
+        
+        .close {
+            position: absolute;
+            right: 20px;
+            top: 10px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #999;
+        }
+        
+        .close:hover {
+            color: #333;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        .form-group textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>支付配置</h1>
+        </div>
+        
+        <div class="toolbar">
+            <button class="btn btn-success" onclick="openModal()">新增配置</button>
+            <a href="/admin" class="btn">返回首页</a>
+        </div>
+        
+        <table id="configTable">
+            <thead>
+                <tr>
+                    <th>配置ID</th>
+                    <th>价格类型</th>
+                    <th>金额</th>
+                    <th>支付URL</th>
+                    <th>描述</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="configTableBody">
+            </tbody>
+        </table>
+        
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <p>暂无支付配置</p>
+        </div>
+        
+        <a href="/admin" class="back-link">返回首页</a>
+    </div>
+    
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">新增支付配置</h2>
+            <form id="configForm" onsubmit="saveConfig(event)">
+                <input type="hidden" id="price_id" name="price_id">
+                
+                <div class="form-group">
+                    <label for="price_type">价格类型：</label>
+                    <input type="text" id="price_type" name="price_type" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="amount">金额：</label>
+                    <input type="number" id="amount" name="amount" step="0.01" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="payment_url">支付URL：</label>
+                    <input type="text" id="payment_url" name="payment_url" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">描述：</label>
+                    <textarea id="description" name="description"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="status">状态：</label>
+                    <select id="status" name="status">
+                        <option value="Y">启用</option>
+                        <option value="N">禁用</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn btn-success">保存</button>
+                <button type="button" class="btn btn-danger" onclick="closeModal()">取消</button>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        function loadConfigs() {
+            fetch('/admin/api/payment_config')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.getElementById('configTableBody');
+                    const emptyState = document.getElementById('emptyState');
+                    
+                    if (data.configs && data.configs.length > 0) {
+                        tableBody.innerHTML = '';
+                        emptyState.style.display = 'none';
+                        
+                        data.configs.forEach(config => {
+                            const row = document.createElement('tr');
+                            
+                            const statusClass = config.STATUS === 'Y' ? 'status-active' : 'status-inactive';
+                            const statusText = config.STATUS === 'Y' ? '启用' : '禁用';
+                            const amount = config.AMOUNT ? parseFloat(config.AMOUNT).toFixed(2) : '0.00';
+                            
+                            row.innerHTML = `
+                                <td>${config.PRICE_ID || '-'}</td>
+                                <td>${config.PRICE_TYPE || '-'}</td>
+                                <td class="amount">¥${amount}</td>
+                                <td>${config.PAYMENT_URL || '-'}</td>
+                                <td>${config.DESCRIPTION || '-'}</td>
+                                <td><span class="status ${statusClass}">${statusText}</span></td>
+                                <td>
+                                    <button class="btn" onclick="editConfig('${config.PRICE_ID}')">编辑</button>
+                                    <button class="btn btn-danger" onclick="deleteConfig('${config.PRICE_ID}')">删除</button>
+                                </td>
+                            `;
+                            
+                            tableBody.appendChild(row);
+                        });
+                    } else {
+                        tableBody.innerHTML = '';
+                        emptyState.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('加载支付配置失败:', error);
+                    alert('加载支付配置失败');
+                });
+        }
+        
+        function openModal(priceId = null) {
+            const modal = document.getElementById('configModal');
+            const form = document.getElementById('configForm');
+            const title = document.getElementById('modalTitle');
+            
+            form.reset();
+            
+            if (priceId) {
+                title.textContent = '编辑支付配置';
+                document.getElementById('price_id').value = priceId;
+                
+                // 加载配置数据
+                fetch('/admin/api/payment_config')
+                    .then(response => response.json())
+                    .then(data => {
+                        const config = data.configs.find(c => c.PRICE_ID === priceId);
+                        if (config) {
+                            document.getElementById('price_type').value = config.PRICE_TYPE;
+                            document.getElementById('amount').value = config.AMOUNT;
+                            document.getElementById('payment_url').value = config.PAYMENT_URL;
+                            document.getElementById('description').value = config.DESCRIPTION;
+                            document.getElementById('status').value = config.STATUS;
+                        }
+                    });
+            } else {
+                title.textContent = '新增支付配置';
+                document.getElementById('price_id').value = '';
+            }
+            
+            modal.style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('configModal').style.display = 'none';
+        }
+        
+        function saveConfig(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            fetch('/admin/payment_config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    alert(result.message);
+                    closeModal();
+                    loadConfigs();
+                } else {
+                    alert('保存失败: ' + result.message);
+                }
+            })
+            .catch(error => {
+                console.error('保存配置失败:', error);
+                alert('保存配置失败');
+            });
+        }
+        
+        function editConfig(priceId) {
+            openModal(priceId);
+        }
+        
+        function deleteConfig(priceId) {
+            if (!confirm('确定要删除该配置吗？')) {
+                return;
+            }
+            
+            // 这里应该调用删除API
+            alert('删除功能待实现');
+        }
+        
+        // 页面加载时自动加载配置列表
+        window.onload = function() {
+            loadConfigs();
+        };
+        
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('configModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        };
+    </script>
+</body>
+</html>

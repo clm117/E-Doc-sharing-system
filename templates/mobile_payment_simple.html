@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title>支付宝支付</title>
+    <style type="text/css">
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            line-height: 1.5;
+            padding: 0;
+            margin: 0;
+        }
+        
+        /* 顶部导航栏 */
+        .header {
+            background-color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 3px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .back-btn {
+            font-size: 24px;
+            color: #333;
+            text-decoration: none;
+        }
+        
+        .header-title {
+            font-size: 18px;
+            font-weight: normal;
+            margin: 0;
+        }
+        
+        .more-btn {
+            font-size: 24px;
+            color: #333;
+            text-decoration: none;
+        }
+        
+        /* 主要内容区域 */
+        .main-content {
+            padding: 20px;
+            text-align: center;
+        }
+        
+        /* 支付信息 */
+        .payment-info {
+            margin-bottom: 30px;
+            background-color: #f5f7fa;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .payment-amount {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #ff4d4f;
+            font-weight: bold;
+        }
+        
+        .payment-title {
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .payment-desc {
+            font-size: 14px;
+            margin-bottom: 15px;
+            color: #666;
+        }
+        
+        .payment-hint {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 20px;
+        }
+        
+        /* 立即支付按钮 */
+        .pay-btn {
+            display: block;
+            background-color: #52c41a;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            padding: 12px;
+            margin: 20px auto 30px;
+            width: auto;
+            max-width: 200px;
+        }
+        
+        /* 订单信息 */
+        .order-info {
+            background-color: #f0f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        .order-info h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #1677ff;
+        }
+        
+        .order-info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .order-info-label {
+            color: #666;
+        }
+        
+        .order-info-value {
+            color: #333;
+            font-weight: bold;
+        }
+        
+        /* 功能按钮区域 */
+        .action-buttons {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+        
+        .action-btn {
+            background-color: #1677ff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 0 10px;
+        }
+        
+
+        
+        /* 弹窗样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 0 auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 300px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        
+        .modal-message {
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .modal-confirm-btn {
+            background-color: #1677ff;
+            color: white;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="header">
+        <a href="javascript:history.back()" class="back-btn">&lt;</a>
+        <h1 class="header-title">支付宝支付</h1>
+        <a href="#" class="more-btn">...</a>
+    </div>
+    
+    <!-- 主要内容区域 -->
+    <div class="main-content">
+        <!-- 订单信息 -->
+        <div class="order-info">
+            <h3>订单信息</h3>
+            <div class="order-info-item">
+                <span class="order-info-label">订单编号：</span>
+                <span class="order-info-value" id="orderNo">正在获取...</span>
+            </div>
+            <div class="order-info-item">
+                <span class="order-info-label">创建时间：</span>
+                <span class="order-info-value" id="createTime">正在获取...</span>
+            </div>
+        </div>
+        
+        <!-- 支付信息 -->
+        <div class="payment-info">
+            <div class="payment-title">学习资料购买</div>
+            <div class="payment-desc">获取高质量学习资料，提升专业技能</div>
+            <div class="payment-amount">¥ {{ amount|round(2) }}</div>
+            <div class="payment-hint">完成支付后，回到原网页刷新查看资料密码</div>
+        </div>
+        
+
+        
+        <!-- 加载提示 -->
+        <div id="loadingHint" style="display: none; color: #999; margin-top: 10px; text-align: center;">
+            正在跳转到支付宝支付页面，请稍候...
+        </div>
+        
+        <!-- 立即支付按钮 -->
+        <a href="javascript:void(0)" class="pay-btn" id="payBtn">立即支付</a>
+        
+        <!-- 功能按钮区域 -->
+        <div class="action-buttons">
+            <button class="action-btn" id="contactBtn">联系卖家</button>
+        </div>
+    </div>
+    
+    <!-- 联系卖家弹窗 -->
+    <div id="contactModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-message">卖家QQ：29344161</div>
+            <button class="modal-confirm-btn">确定</button>
+        </div>
+    </div>
+    
+    <script type="text/javascript">
+        // 确保DOM加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 获取元素
+            var modal = document.getElementById("contactModal");
+            var contactBtn = document.getElementById("contactBtn");
+            var confirmBtn = document.querySelector('.modal-confirm-btn');
+            var orderNo = document.getElementById("orderNo");
+            var createTime = document.getElementById("createTime");
+            var payBtn = document.getElementById("payBtn");
+            
+            // 生成随机订单号
+            function generateOrderNo() {
+                var date = new Date();
+                var year = date.getFullYear();
+                var month = String(date.getMonth() + 1).padStart(2, '0');
+                var day = String(date.getDate()).padStart(2, '0');
+                var hour = String(date.getHours()).padStart(2, '0');
+                var minute = String(date.getMinutes()).padStart(2, '0');
+                var second = String(date.getSeconds()).padStart(2, '0');
+                var random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+                return 'ORD' + year + month + day + hour + minute + second + random;
+            }
+            
+            // 设置当前时间
+            function setCurrentTime() {
+                var date = new Date();
+                return date.toLocaleString();
+            }
+            
+            // 初始化页面数据
+            function initPage() {
+                orderNo.textContent = generateOrderNo();
+                createTime.textContent = setCurrentTime();
+            }
+            
+            // 显示联系卖家弹窗
+            function showContactModal() {
+                modal.style.display = "flex";
+                modal.style.alignItems = "center";
+                modal.style.justifyContent = "center";
+            }
+            
+            // 关闭联系卖家弹窗
+            function closeContactModal() {
+                modal.style.display = "none";
+            }
+            
+            // 处理立即支付按钮点击事件
+            function handlePayBtnClick() {
+                // 获取URL中的参数
+                const urlParams = new URLSearchParams(window.location.search);
+                const sessionId = urlParams.get('session_id');
+                const fileId = urlParams.get('file_id');
+                const filePriceType = urlParams.get('file_price_type');
+                
+                // 禁用按钮，防止重复点击
+                payBtn.disabled = true;
+                payBtn.textContent = '正在跳转支付...';
+                
+                // 显示加载提示
+                document.getElementById('loadingHint').style.display = 'block';
+                
+                // 调用后端支付宝WAP支付接口
+                fetch('/alipay_wap_pay', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        file_id: fileId,
+                        file_price_type: filePriceType
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 跳转到支付宝支付页面
+                        console.log('获取支付URL成功:', data.pay_url);
+                        
+                        // 创建一个新的div元素，用于显示跳转提示和用户交互
+                        var jumpContainer = document.createElement('div');
+                        jumpContainer.style.position = 'fixed';
+                        jumpContainer.style.top = '0';
+                        jumpContainer.style.left = '0';
+                        jumpContainer.style.width = '100%';
+                        jumpContainer.style.height = '100%';
+                        jumpContainer.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                        jumpContainer.style.zIndex = '999999';
+                        jumpContainer.style.display = 'flex';
+                        jumpContainer.style.flexDirection = 'column';
+                        jumpContainer.style.justifyContent = 'center';
+                        jumpContainer.style.alignItems = 'center';
+                        jumpContainer.style.fontFamily = '"Microsoft YaHei", Arial, sans-serif';
+                        
+                        // 添加跳转提示文本
+                        var jumpTitle = document.createElement('h2');
+                        jumpTitle.textContent = '正在跳转到支付宝支付页面';
+                        jumpTitle.style.color = '#333';
+                        jumpTitle.style.marginBottom = '20px';
+                        jumpContainer.appendChild(jumpTitle);
+                        
+                        // 添加加载动画
+                        var loadingAnimation = document.createElement('div');
+                        loadingAnimation.style.width = '50px';
+                        loadingAnimation.style.height = '50px';
+                        loadingAnimation.style.border = '5px solid #f3f3f3';
+                        loadingAnimation.style.borderTop = '5px solid #52c41a';
+                        loadingAnimation.style.borderRadius = '50%';
+                        loadingAnimation.style.animation = 'spin 1s linear infinite';
+                        loadingAnimation.style.marginBottom = '30px';
+                        jumpContainer.appendChild(loadingAnimation);
+                        
+                        // 添加CSS动画
+                        var style = document.createElement('style');
+                        style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+                        document.head.appendChild(style);
+                        
+                        // 添加手动跳转按钮
+                        var manualJumpBtn = document.createElement('button');
+                        manualJumpBtn.textContent = '点击这里继续支付';
+                        manualJumpBtn.style.padding = '12px 30px';
+                        manualJumpBtn.style.fontSize = '16px';
+                        manualJumpBtn.style.backgroundColor = '#1677ff';
+                        manualJumpBtn.style.color = 'white';
+                        manualJumpBtn.style.border = 'none';
+                        manualJumpBtn.style.borderRadius = '6px';
+                        manualJumpBtn.style.cursor = 'pointer';
+                        manualJumpBtn.style.marginBottom = '20px';
+                        jumpContainer.appendChild(manualJumpBtn);
+                        
+                        // 添加提示文本
+                        var hintText = document.createElement('p');
+                        hintText.textContent = '如果3秒后未自动跳转，请点击上方按钮';
+                        hintText.style.color = '#666';
+                        hintText.style.fontSize = '14px';
+                        jumpContainer.appendChild(hintText);
+                        
+                        // 将跳转容器添加到页面
+                        document.body.appendChild(jumpContainer);
+                        
+                        // 清除所有定时器，避免重复跳转
+                        var timers = [];
+                        var interval = null;
+                        
+                        // 方法1：使用setTimeout延迟跳转，绕过微信拦截
+                        timers.push(setTimeout(function() {
+                            console.log('尝试方法1：setTimeout延迟跳转');
+                            try {
+                                // 使用更底层的方式来处理跳转
+                                var link = document.createElement('a');
+                                link.href = data.pay_url;
+                                link.target = '_self';
+                                link.style.display = 'none';
+                                document.body.appendChild(link);
+                                
+                                // 使用dispatchEvent模拟真实点击
+                                var event = new MouseEvent('click', {
+                                    view: window,
+                                    bubbles: true,
+                                    cancelable: true
+                                });
+                                link.dispatchEvent(event);
+                                
+                                document.body.removeChild(link);
+                            } catch (e) {
+                                console.error('方法1跳转失败:', e);
+                            }
+                        }, 2000));
+                        
+                        // 方法2：使用location.replace跳转
+                        timers.push(setTimeout(function() {
+                            console.log('尝试方法2：location.replace跳转');
+                            try {
+                                window.location.replace(data.pay_url);
+                            } catch (e) {
+                                console.error('方法2跳转失败:', e);
+                            }
+                        }, 2500));
+                        
+                        // 方法3：使用form表单提交跳转
+                        timers.push(setTimeout(function() {
+                            console.log('尝试方法3：form表单提交跳转');
+                            try {
+                                var form = document.createElement('form');
+                                form.action = data.pay_url;
+                                form.method = 'GET';
+                                form.target = '_self';
+                                form.style.display = 'none';
+                                document.body.appendChild(form);
+                                form.submit();
+                                document.body.removeChild(form);
+                            } catch (e) {
+                                console.error('方法3跳转失败:', e);
+                            }
+                        }, 3000));
+                        
+                        // 方法4：使用meta refresh跳转
+                        timers.push(setTimeout(function() {
+                            console.log('尝试方法4：meta refresh跳转');
+                            try {
+                                var meta = document.createElement('meta');
+                                meta.httpEquiv = 'refresh';
+                                meta.content = '0;url=' + data.pay_url;
+                                document.head.appendChild(meta);
+                            } catch (e) {
+                                console.error('方法4跳转失败:', e);
+                            }
+                        }, 3500));
+                        
+                        // 方法5：使用document.write重写页面
+                        timers.push(setTimeout(function() {
+                            console.log('尝试方法5：document.write重写页面');
+                            try {
+                                document.write('<html><head><meta http-equiv="refresh" content="0;url=' + data.pay_url + '"><title>跳转中...</title></head><body style="margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f5f5f5;"><div style="text-align: center;"><h2>正在跳转到支付宝支付页面</h2><div style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #52c41a; border-radius: 50%; animation: spin 1s linear infinite; margin: 20px auto;"></div><p>如果未自动跳转，请点击 <a href="' + data.pay_url + '">这里</a></p></div><style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style></body></html>');
+                                document.close();
+                            } catch (e) {
+                                console.error('方法5跳转失败:', e);
+                            }
+                        }, 4000));
+                        
+                        // 方法6：使用iframe跳转
+                        timers.push(setTimeout(function() {
+                            console.log('尝试方法6：iframe跳转');
+                            try {
+                                var iframe = document.createElement('iframe');
+                                iframe.src = data.pay_url;
+                                iframe.style.width = '100%';
+                                iframe.style.height = '100%';
+                                iframe.style.position = 'fixed';
+                                iframe.style.top = '0';
+                                iframe.style.left = '0';
+                                iframe.style.zIndex = '1000000';
+                                document.body.appendChild(iframe);
+                            } catch (e) {
+                                console.error('方法6跳转失败:', e);
+                            }
+                        }, 4500));
+                        
+                        // 方法7：使用script标签动态跳转
+                        timers.push(setTimeout(function() {
+                            console.log('尝试方法7：script标签动态跳转');
+                            try {
+                                var script = document.createElement('script');
+                                script.textContent = 'setTimeout(function() { window.location.replace("' + data.pay_url + '"); }, 100);';
+                                document.body.appendChild(script);
+                            } catch (e) {
+                                console.error('方法7跳转失败:', e);
+                            }
+                        }, 5000));
+                        
+                        // 方法8：使用requestAnimationFrame跳转
+                        timers.push(setTimeout(function() {
+                            console.log('尝试方法8：requestAnimationFrame跳转');
+                            try {
+                                requestAnimationFrame(function() {
+                                    window.location.replace(data.pay_url);
+                                });
+                            } catch (e) {
+                                console.error('方法8跳转失败:', e);
+                            }
+                        }, 5500));
+                        
+                        // 方法9：使用setInterval持续尝试跳转
+                        var intervalCount = 0;
+                        var maxIntervals = 3;
+                        interval = setInterval(function() {
+                            console.log('尝试方法9：setInterval持续跳转，第' + (intervalCount + 1) + '次');
+                            try {
+                                window.location.replace(data.pay_url);
+                                intervalCount++;
+                                if (intervalCount >= maxIntervals) {
+                                    clearInterval(interval);
+                                }
+                            } catch (e) {
+                                console.error('方法9跳转失败:', e);
+                                clearInterval(interval);
+                            }
+                        }, 6000);
+                        
+                        // 绑定手动跳转按钮点击事件
+                        manualJumpBtn.addEventListener('click', function() {
+                            console.log('用户点击手动跳转按钮');
+                            // 清除所有定时器
+                            timers.forEach(function(timer) {
+                                clearTimeout(timer);
+                            });
+                            clearInterval(interval);
+                            
+                            // 尝试多种跳转方式
+                            try {
+                                // 方法1：使用a标签点击
+                                var link = document.createElement('a');
+                                link.href = data.pay_url;
+                                link.target = '_self';
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                            } catch (e) {
+                                console.error('手动跳转失败:', e);
+                                // 备用方法：直接使用location.replace
+                                window.location.replace(data.pay_url);
+                            }
+                        });
+                        
+                        // 10秒后清除所有定时器
+                        setTimeout(function() {
+                            console.log('清除所有定时器');
+                            timers.forEach(function(timer) {
+                                clearTimeout(timer);
+                            });
+                            clearInterval(interval);
+                        }, 10000);
+                    } else {
+                        // 支付失败，恢复按钮
+                        payBtn.disabled = false;
+                        payBtn.textContent = '立即支付';
+                        document.getElementById('loadingHint').style.display = 'none';
+                        alert(data.message || '支付初始化失败，请重试');
+                    }
+                })
+                .catch(error => {
+                    // 网络错误，恢复按钮
+                    payBtn.disabled = false;
+                    payBtn.textContent = '立即支付';
+                    document.getElementById('loadingHint').style.display = 'none';
+                    console.error('支付请求失败:', error);
+                    alert('网络错误，请检查连接后重试');
+                });
+            }
+            
+            // 检查支付状态
+            function checkPaymentStatus() {
+                // 获取URL中的参数
+                const urlParams = new URLSearchParams(window.location.search);
+                const sessionId = urlParams.get('session_id');
+                const fileId = urlParams.get('file_id');
+                
+                if (!sessionId) {
+                    console.log('缺少session_id参数，停止检查支付状态');
+                    return;
+                }
+                
+                // 构建查询参数
+                let queryParams = `session_id=${sessionId}`;
+                if (fileId) {
+                    queryParams += `&file_id=${fileId}`;
+                }
+                
+                // 调用后端检查支付状态接口
+                fetch(`/check_payment_status?${queryParams}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // 支付成功，跳转到支付成功页面
+                            console.log('支付成功，跳转到支付成功页面');
+                            window.location.href = `/payment_success?file_name=${encodeURIComponent(data.file_name)}&file_password=${encodeURIComponent(data.file_password)}&amount=${data.amount}`;
+                        } else {
+                            // 支付尚未完成，继续检查
+                            console.log('支付尚未完成，继续检查');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('检查支付状态失败:', error);
+                    });
+            }
+            
+            // 初始化支付状态检查
+            function initPaymentStatusCheck() {
+                // 每隔5秒检查一次支付状态
+                setInterval(checkPaymentStatus, 5000);
+                console.log('已启动支付状态检查，每5秒检查一次');
+            }
+            
+            // 初始化页面
+            initPage();
+            
+            // 启动支付状态检查
+            initPaymentStatusCheck();
+            
+            // 自动触发支付流程
+            window.onload = function() {
+                // 延迟1秒自动触发支付，给页面加载一些时间
+                setTimeout(function() {
+                    handlePayBtnClick();
+                }, 1000);
+            };
+            
+            // 绑定点击事件
+            contactBtn.onclick = showContactModal;
+            confirmBtn.onclick = closeContactModal;
+            payBtn.onclick = handlePayBtnClick;
+            
+            // 点击弹窗外部关闭弹窗
+            modal.onclick = function(event) {
+                if (event.target == modal) {
+                    closeContactModal();
+                }
+            }
+        });
+    </script>
+</body>
+</html>

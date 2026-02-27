@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+作者信息搜索演示脚本
+"""
+
+import pandas as pd
+
+
+def simulate_author_search(standard_name):
+    """
+    模拟搜索作者信息
+    """
+    # 模拟搜索结果，实际应用中需要替换为真实的WebSearch调用
+    mock_results = {
+        "Python程序设计课程导论": "张三",
+        "面积关系帮你解题": "张景中",
+        "怎样用配方法解题": "奚定华",
+        "根与系数的关系及其应用": "毛鸿翔",
+        "离散数学": "左孝凌",
+        "Mathematica使用指南": "Stephen Wolfram",
+        "概率与统计（第二版）": "魏宗舒",
+        "统计学（第三版）": "贾俊平",
+        "高等数学（上）": "同济大学数学系",
+        "线性代数": "同济大学数学系"
+    }
+    
+    return mock_results.get(standard_name, "")
+
+
+def main():
+    """
+    主函数
+    """
+    # 配置
+    excel_file = r"d:\Program Files (x86)\Trae CN\111code\pdf_metadata.xlsx"
+    
+    # 读取现有Excel文件
+    print(f"读取Excel文件：{excel_file}")
+    df = pd.read_excel(excel_file)
+    
+    # 检查文件结构
+    print(f"Excel文件包含 {len(df)} 行数据")
+    print(f"列名：{list(df.columns)}")
+    
+    # 确保"作者"列存在
+    if "作者" not in df.columns:
+        df["作者"] = ""
+    
+    # 确保"标准化文件名"列存在
+    if "标准化文件名" not in df.columns:
+        print("错误：Excel文件中没有'标准化文件名'列")
+        return
+    
+    # 统计需要处理的行数
+    need_update = df[(pd.notna(df["标准化文件名"])) & (df["标准化文件名"] != "") & ((pd.isna(df["作者"])) | (df["作者"] == ""))]
+    print(f"需要更新作者信息的行数：{len(need_update)}")
+    
+    # 显示前5行需要更新的数据
+    print("\n前5行需要更新的数据：")
+    print(need_update.head(5))
+    
+    # 使用模拟数据更新作者信息
+    print("\n使用模拟数据更新作者信息...")
+    updated_count = 0
+    
+    # 只处理前20行作为演示
+    for index, row in need_update.head(20).iterrows():
+        standard_name = row["标准化文件名"]
+        print(f"处理第 {index + 1} 行: {standard_name}")
+        
+        # 模拟搜索作者信息
+        author = simulate_author_search(standard_name)
+        
+        # 更新作者信息
+        if author:
+            df.at[index, "作者"] = author
+            updated_count += 1
+            print(f"  更新作者: {author}")
+    
+    # 保存更新结果
+    print(f"\n共处理 20 行，更新了 {updated_count} 条记录")
+    print(f"保存Excel文件：{excel_file}")
+    df.to_excel(excel_file, index=False, engine='openpyxl')
+    
+    print("\n演示完成！")
+    print("\n实际应用中，您需要：")
+    print("1. 使用WebSearch工具替代模拟数据")
+    print("2. 处理所有需要更新的行")
+    print("3. 优化搜索结果解析逻辑")
+
+
+if __name__ == '__main__':
+    main()

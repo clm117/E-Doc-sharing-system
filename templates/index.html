@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title>学习资料购买</title>
+    <style type="text/css">
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #000000;
+            margin-bottom: 30px;
+            font-size: 32px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .payment-info {
+            font-size: 18px;
+            margin-bottom: 20px;
+            line-height: 1.6;
+            text-align: center;
+        }
+        
+        .contact-info {
+            font-size: 18px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+            text-align: center;
+        }
+        
+        .qq-number {
+            color: #ff0000;
+            font-weight: bold;
+            font-size: 20px;
+        }
+        
+        .main-content {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 40px;
+            margin-top: 40px;
+            flex-wrap: wrap;
+        }
+        
+        .left-section {
+            flex: 1;
+            min-width: 250px;
+            text-align: center;
+        }
+        
+        .right-section {
+            flex: 1;
+            min-width: 250px;
+            text-align: center;
+        }
+        
+        .qrcode-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px 0;
+        }
+        
+        .qrcode-container img {
+            width: 250px;
+            height: 250px;
+            border: 2px solid #ddd;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .qrcode-hint {
+            font-size: 16px;
+            color: #666;
+            margin-top: 15px;
+            text-align: center;
+        }
+        
+        .payment-hint {
+            font-size: 16px;
+            color: #666;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .refresh-btn {
+            display: block;
+            background-color: #1677ff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            padding: 12px 24px;
+            margin: 10px auto;
+            width: auto;
+            max-width: 200px;
+        }
+        
+        .refresh-btn:hover {
+            background-color: #409eff;
+        }
+        
+        .qrcode-section {
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>学习资料购买</h1>
+        
+        <p class="payment-info">扫描二维码支付，支付成功后即可获取学习资料密码</p>
+        
+        <p class="contact-info">如有疑问，请联系QQ <span class="qq-number">29344161</span></p>
+        
+        <div class="main-content">
+            <div class="qrcode-section">
+                <div class="qrcode-container">
+                    <img id="qrcode" src="/qrcode?session_id={{ session_id }}{% if file_id %}&file_id={{ file_id }}{% endif %}" alt="支付二维码" title="扫描二维码进行支付">
+                </div>
+                
+                <p class="qrcode-hint">使用支付宝扫描上方二维码</p>
+                
+                <p class="payment-hint">支付成功后，等待几秒钟，然后</p>
+                
+                <button class="refresh-btn" id="refreshBtn">立即刷新</button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="text/javascript">
+        document.addEventListener('DOMContentLoaded', function() {
+            var refreshBtn = document.getElementById('refreshBtn');
+            var sessionId = '{{ session_id }}';
+            var fileId = '{% if file_id %}{{ file_id }}{% endif %}';
+            
+            refreshBtn.onclick = function() {
+                if (!sessionId) {
+                    alert('缺少session_id参数，无法查询支付状态');
+                    return;
+                }
+                
+                // 构建查询参数
+                let queryParams = `session_id=${sessionId}`;
+                if (fileId) {
+                    queryParams += `&file_id=${fileId}`;
+                }
+                
+                // 调用后端检查支付状态接口
+                fetch(`/check_payment_status?${queryParams}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // 支付成功，跳转到支付成功页面
+                            console.log('支付成功，跳转到支付成功页面');
+                            window.location.href = `/payment_success?file_name=${encodeURIComponent(data.file_name)}&file_password=${encodeURIComponent(data.file_password)}&amount=${data.amount}`;
+                        } else {
+                            // 支付尚未完成，提示用户
+                            alert('支付尚未完成，请稍后再试');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('检查支付状态失败:', error);
+                        alert('检查支付状态失败，请稍后再试');
+                    });
+            };
+        });
+    </script>
+</body>
+</html>

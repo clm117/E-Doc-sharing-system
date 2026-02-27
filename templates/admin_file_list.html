@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件列表 - 后台管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background-color: #007bff;
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .search-box {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .search-box input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .search-box input {
+            flex: 1;
+        }
+        
+        .search-box button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .action-buttons {
+            padding: 5px;
+            white-space: nowrap;
+        }
+        
+        .btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            margin-right: 5px;
+        }
+        
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        
+        .back-link {
+            display: inline-block;
+            color: #007bff;
+            text-decoration: none;
+            margin-top: 20px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+            gap: 10px;
+        }
+        
+        .pagination button {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            background-color: white;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        
+        .pagination button:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .pagination button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        .pagination .page-info {
+            padding: 8px 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>文件列表</h1>
+        </div>
+        
+        <div class="toolbar">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="搜索文件..." onkeyup="if(event.key === 'Enter') searchFiles()">
+                <button onclick="searchFiles()">搜索</button>
+            </div>
+        </div>
+        
+        <table id="fileTable">
+            <thead>
+                <tr>
+                    <th>文件ID</th>
+                    <th>文件名称</th>
+                    <th>文件路径</th>
+                    <th>作者</th>
+                    <th>标准化名称</th>
+                    <th>价格类型</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="fileTableBody">
+            </tbody>
+        </table>
+        
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <p>暂无文件数据</p>
+        </div>
+        
+        <div id="pagination" class="pagination" style="display: none;">
+            <button id="prevBtn" onclick="changePage(-1)">上一页</button>
+            <span class="page-info">第 <span id="currentPage">1</span> 页 / 共 <span id="totalPages">1</span> 页</span>
+            <button id="nextBtn" onclick="changePage(1)">下一页</button>
+        </div>
+        
+        <a href="/admin" class="back-link">返回首页</a>
+    </div>
+    
+    <script>
+        let currentPage = 1;
+        let totalPages = 1;
+        
+        function loadFiles(page = 1) {
+            currentPage = page;
+            fetch(`/admin/api/files?page=${page}`)
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.getElementById('fileTableBody');
+                    const emptyState = document.getElementById('emptyState');
+                    const pagination = document.getElementById('pagination');
+                    
+                    if (data.files && data.files.length > 0) {
+                        tableBody.innerHTML = '';
+                        emptyState.style.display = 'none';
+                        pagination.style.display = 'flex';
+                        
+                        totalPages = data.total_pages;
+                        document.getElementById('currentPage').textContent = data.page;
+                        document.getElementById('totalPages').textContent = data.total_pages;
+                        document.getElementById('prevBtn').disabled = data.page <= 1;
+                        document.getElementById('nextBtn').disabled = data.page >= data.total_pages;
+                        
+                        data.files.forEach(file => {
+                            const row = document.createElement('tr');
+                            
+                            const priceType = file.FILE_PRICE_TYPE === '1' ? '标准版' : (file.FILE_PRICE_TYPE === '2' ? '高级版' : file.FILE_PRICE_TYPE);
+                            
+                            row.innerHTML = `
+                                <td>${file.FILE_ID || '-'}</td>
+                                <td>${file.FILE_NAME || '-'}</td>
+                                <td>${file.FILE_PATH || '-'}</td>
+                                <td>${file.FILE_AUTHOR || '-'}</td>
+                                <td>${file.STANDARD_NAME || '-'}</td>
+                                <td>${priceType}</td>
+                                <td>${file.CREATE_TIME ? new Date(file.CREATE_TIME).toLocaleString() : '-'}</td>
+                                <td class="action-buttons">
+                                    <a href="/admin/edit_file?file_id=${file.FILE_ID}" class="btn">编辑</a>
+                                    <button onclick="deleteFile('${file.FILE_ID}')" class="btn btn-danger">删除</button>
+                                </td>
+                            `;
+                            
+                            tableBody.appendChild(row);
+                        });
+                    } else {
+                        tableBody.innerHTML = '';
+                        emptyState.style.display = 'block';
+                        pagination.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('加载文件列表失败:', error);
+                    alert('加载文件列表失败');
+                });
+        }
+        
+        function changePage(delta) {
+            const newPage = currentPage + delta;
+            if (newPage >= 1 && newPage <= totalPages) {
+                loadFiles(newPage);
+            }
+        }
+        
+        function searchFiles() {
+            const keyword = document.getElementById('searchInput').value;
+            if (!keyword.trim()) {
+                loadFiles(1);
+                return;
+            }
+            
+            fetch(`/admin/api/search_files?keyword=${encodeURIComponent(keyword)}&page=1`)
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.getElementById('fileTableBody');
+                    const emptyState = document.getElementById('emptyState');
+                    const pagination = document.getElementById('pagination');
+                    
+                    if (data.files && data.files.length > 0) {
+                        tableBody.innerHTML = '';
+                        emptyState.style.display = 'none';
+                        pagination.style.display = 'flex';
+                        
+                        totalPages = data.total_pages;
+                        currentPage = 1;
+                        document.getElementById('currentPage').textContent = data.page;
+                        document.getElementById('totalPages').textContent = data.total_pages;
+                        document.getElementById('prevBtn').disabled = data.page <= 1;
+                        document.getElementById('nextBtn').disabled = data.page >= data.total_pages;
+                        
+                        data.files.forEach(file => {
+                            const row = document.createElement('tr');
+                            
+                            const priceType = file.FILE_PRICE_TYPE === '1' ? '标准版' : (file.FILE_PRICE_TYPE === '2' ? '高级版' : file.FILE_PRICE_TYPE);
+                            
+                            row.innerHTML = `
+                                <td>${file.FILE_ID || '-'}</td>
+                                <td>${file.FILE_NAME || '-'}</td>
+                                <td>${file.FILE_PATH || '-'}</td>
+                                <td>${file.FILE_AUTHOR || '-'}</td>
+                                <td>${file.STANDARD_NAME || '-'}</td>
+                                <td>${priceType}</td>
+                                <td>${file.CREATE_TIME ? new Date(file.CREATE_TIME).toLocaleString() : '-'}</td>
+                                <td class="action-buttons">
+                                    <a href="/admin/edit_file?file_id=${file.FILE_ID}" class="btn">编辑</a>
+                                    <button onclick="deleteFile('${file.FILE_ID}')" class="btn btn-danger">删除</button>
+                                </td>
+                            `;
+                            
+                            tableBody.appendChild(row);
+                        });
+                    } else {
+                        tableBody.innerHTML = '';
+                        emptyState.style.display = 'block';
+                        pagination.style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('搜索失败:', error);
+                    alert('搜索失败');
+                });
+        }
+        
+        function deleteFile(fileId) {
+            if (!confirm('确定要删除该文件吗？')) {
+                return;
+            }
+            
+            fetch('/admin/api/delete_file', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ file_id: fileId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('文件删除成功');
+                    loadFiles(currentPage);
+                } else {
+                    alert('文件删除失败: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('删除文件失败:', error);
+                alert('删除文件失败');
+            });
+        }
+        
+        // 页面加载时自动加载文件列表
+        window.onload = function() {
+            loadFiles(1);
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>支付记录 - 后台管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background-color: #007bff;
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .search-box {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .search-box input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .search-box button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status-success {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .status-pending {
+            background-color: #ffc107;
+            color: #333;
+        }
+        
+        .status-failed {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .amount {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .back-link {
+            display: inline-block;
+            color: #007bff;
+            text-decoration: none;
+            margin-top: 20px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>支付记录</h1>
+        </div>
+        
+        <div class="toolbar">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="搜索订单号或文件名...">
+                <button onclick="searchRecords()">搜索</button>
+            </div>
+        </div>
+        
+        <table id="paymentTable">
+            <thead>
+                <tr>
+                    <th>订单号</th>
+                    <th>文件名称</th>
+                    <th>支付金额</th>
+                    <th>支付状态</th>
+                    <th>创建时间</th>
+                    <th>支付时间</th>
+                    <th>文件密码</th>
+                </tr>
+            </thead>
+            <tbody id="paymentTableBody">
+            </tbody>
+        </table>
+        
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <p>暂无支付记录</p>
+        </div>
+        
+        <a href="/admin" class="back-link">返回首页</a>
+    </div>
+    
+    <script>
+        function loadRecords() {
+            fetch('/admin/api/payment_records')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.getElementById('paymentTableBody');
+                    const emptyState = document.getElementById('emptyState');
+                    
+                    if (data.records && data.records.length > 0) {
+                        tableBody.innerHTML = '';
+                        emptyState.style.display = 'none';
+                        
+                        data.records.forEach(record => {
+                            const row = document.createElement('tr');
+                            
+                            let statusClass = 'status-pending';
+                            let statusText = '待支付';
+                            
+                            if (record.TRADE_STATUS === 'TRADE_SUCCESS') {
+                                statusClass = 'status-success';
+                                statusText = '支付成功';
+                            } else if (record.TRADE_STATUS === 'TRADE_FAILED') {
+                                statusClass = 'status-failed';
+                                statusText = '支付失败';
+                            }
+                            
+                            row.innerHTML = `
+                                <td>${record.OUT_TRADE_NO}</td>
+                                <td>${record.FILE_NAME || '-'}</td>
+                                <td class="amount">¥${parseFloat(record.TOTAL_AMOUNT).toFixed(2)}</td>
+                                <td><span class="status ${statusClass}">${statusText}</span></td>
+                                <td>${record.GMT_CREATE ? new Date(record.GMT_CREATE).toLocaleString() : '-'}</td>
+                                <td>${record.GMT_PAYMENT ? new Date(record.GMT_PAYMENT).toLocaleString() : '-'}</td>
+                                <td>${record.FILE_ENCRYPT_PASSWORD || '-'}</td>
+                            `;
+                            
+                            tableBody.appendChild(row);
+                        });
+                    } else {
+                        tableBody.innerHTML = '';
+                        emptyState.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('加载支付记录失败:', error);
+                    alert('加载支付记录失败');
+                });
+        }
+        
+        function searchRecords() {
+            const keyword = document.getElementById('searchInput').value;
+            if (!keyword.trim()) {
+                loadRecords();
+                return;
+            }
+            
+            // 这里应该调用搜索API，暂时使用本地过滤
+            const rows = document.querySelectorAll('#paymentTableBody tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(keyword.toLowerCase())) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+        
+        // 页面加载时自动加载支付记录
+        window.onload = function() {
+            loadRecords();
+        };
+    </script>
+</body>
+</html>
