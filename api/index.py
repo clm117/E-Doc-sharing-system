@@ -1,37 +1,47 @@
-import sys
 import os
-
-# 添加项目根目录到Python路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from app import app
-from flask import request as flask_request
-from werkzeug.wrappers import Response
-
 
 def handler(event, context=None):
     """Vercel Serverless函数入口"""
-    # 构建Flask请求对象
-    method = event.get('httpMethod', 'GET')
-    path = event.get('path', '/')
-    query_string = event.get('queryStringParameters', {})
-    headers = event.get('headers', {})
-    body = event.get('body', '')
+    # 获取请求路径
+    path = event.get('path', '/').strip('/')
     
-    # 处理请求
-    with app.test_request_context(
-        path=path,
-        method=method,
-        data=body,
-        query_string=query_string,
-        headers=headers
-    ):
-        # 处理请求
-        response = app.full_dispatch_request()
-        
-        # 构建响应
+    # 根据路径返回不同的HTML文件
+    if not path or path == 'index':
+        # 返回首页
+        return get_html_response('templates/index.html')
+    elif path == 'payment_success':
+        # 返回支付成功页面
+        return get_html_response('templates/payment_success.html')
+    elif path == 'mobile_payment_simple':
+        # 返回移动端支付页面
+        return get_html_response('templates/mobile_payment_simple.html')
+    else:
+        # 返回404页面
         return {
-            'statusCode': response.status_code,
-            'headers': dict(response.headers),
-            'body': response.get_data(as_text=True)
+            'statusCode': 404,
+            'headers': {
+                'Content-Type': 'text/html'
+            },
+            'body': '<html><body><h1>404 Not Found</h1></body></html>'
+        }
+
+def get_html_response(file_path):
+    """读取并返回HTML文件内容"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'text/html'
+            },
+            'body': html_content
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'text/html'
+            },
+            'body': f'<html><body><h1>Error</h1><p>{str(e)}</p></body></html>'
         }
