@@ -2,23 +2,19 @@
 import os
 import zipfile
 import shutil
+import sqlite3
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, jsonify, send_from_directory
-import cx_Oracle
 from datetime import datetime
 import pyAesCrypt
+import uuid
 
 # 创建Flask应用
 app = Flask(__name__)
 app.debug = True
 
-# Oracle数据库连接配置
-DB_CONFIG = {
-    'user': 'system',
-    'password': 'oracle123',
-    'dsn': 'localhost:1521/ORCLM',
-    'encoding': 'UTF-8'
-}
+# SQLite数据库路径
+SQLITE_DB_PATH = 'docshare.db'
 
 # 配置
 UPLOAD_FOLDER = 'uploads'
@@ -30,13 +26,22 @@ ALLOWED_EXTENSIONS = {'pdf', 'zip', 'rar', '7z', 'txt'}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(ENCRYPTED_FOLDER, exist_ok=True)
 
+# 获取数据库连接
+def get_db_connection():
+    """获取SQLite数据库连接"""
+    try:
+        return sqlite3.connect(SQLITE_DB_PATH)
+    except Exception as e:
+        print(f"SQLite连接失败: {str(e)}")
+        return None
+
 # ==================== 后台管理界面路由 ====================
 
 @app.route('/admin')
 def admin():
     """后台管理界面首页"""
     try:
-        connection = cx_Oracle.connect(**DB_CONFIG)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # 获取文件总数
@@ -48,12 +53,13 @@ def admin():
         payment_count = cursor.fetchone()[0]
         
         # 获取今日收入
+        today = datetime.now().strftime('%Y-%m-%d')
         cursor.execute("""
-            SELECT SUM(TOTAL_AMOUNT) 
+            SELECT SUM(total_amount) 
             FROM alipay_wap_pay_records 
-            WHERE TRADE_STATUS = 'TRADE_SUCCESS' 
-            AND TRUNC(GMT_PAYMENT) = TRUNC(SYSDATE)
-        """)
+            WHERE trade_status = 'TRADE_SUCCESS' 
+            AND DATE(gmt_payment) = ?
+        """, (today,))
         today_income = cursor.fetchone()[0] or 0
         
         cursor.close()
@@ -61,6 +67,7 @@ def admin():
         
         return render_template('admin.html', file_count=file_count, payment_count=payment_count, today_income=today_income)
     except Exception as e:
+        print(f"错误: {str(e)}")
         return render_template('admin.html', file_count=0, payment_count=0, today_income=0)
 
 @app.route('/admin/add_file', methods=['GET', 'POST'])
@@ -83,35 +90,34 @@ def admin_add_file():
             file_password = request.form.get('file_password', '')
             
             # 连接数据库
-            connection = cx_Oracle.connect(**DB_CONFIG)
+            connection = get_db_connection()
             cursor = connection.cursor()
+            
+            # 生成唯一ID
+            file_id = str(uuid.uuid4()).replace('-', '')
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             # 插入file_info表
             insert_sql = """
             INSERT INTO file_info (
-                FILE_ID, FILE_NAME, FILE_PATH, FILE_AUTHOR,
-                STANDARD_NAME, SEARCH_KEYWORDS, FILE_TAGS,
-                FILE_ISBN, FILE_PRICE_TYPE, FILE_PASSWORD,
-                CREATE_TIME, UPDATE_TIME
+                file_id, file_name, file_path, file_author,
+                standard_name, search_keywords, file_tags,
+                file_isbn, file_price_type, file_password,
+                create_time, update_time
             ) VALUES (
-                SYS_GUID(), :file_name, :file_path, :file_author,
-                :standard_name, :search_keywords, :file_tags,
-                :file_isbn, :file_price_type, :file_password,
-                SYSDATE, SYSDATE
+                ?, ?, ?, ?,
+                ?, ?, ?,
+                ?, ?, ?,
+                ?, ?
             )
             """
             
-            cursor.execute(insert_sql, {
-                'file_name': file_name,
-                'file_path': file_path,
-                'file_author': file_author,
-                'standard_name': standard_name,
-                'search_keywords': search_keywords,
-                'file_tags': file_tags,
-                'file_isbn': file_isbn,
-                'file_price_type': file_price_type,
-                'file_password': file_password
-            })
+            cursor.execute(insert_sql, (
+                file_id, file_name, file_path, file_author,
+                standard_name, search_keywords, file_tags,
+                file_isbn, file_price_type, file_password,
+                current_time, current_time
+            ))
             
             connection.commit()
             cursor.close()
@@ -120,6 +126,7 @@ def admin_add_file():
             return jsonify({'success': True, 'message': '文件添加成功'})
             
         except Exception as e:
+            print(f"错误: {str(e)}")
             return jsonify({'success': False, 'message': '文件添加失败: ' + str(e)})
 
 @app.route('/admin/encrypt_and_compress', methods=['POST'])
@@ -177,11 +184,11 @@ def admin_edit_file():
     if request.method == 'GET':
         file_id = request.args.get('file_id')
         
-        connection = cx_Oracle.connect(**DB_CONFIG)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # 查询文件信息
-        cursor.execute("SELECT * FROM file_info WHERE FILE_ID = :file_id", file_id=file_id)
+        cursor.execute("SELECT * FROM file_info WHERE file_id = ?", (file_id,))
         file_info = cursor.fetchone()
         
         cursor.close()
@@ -205,35 +212,37 @@ def admin_edit_file():
             file_password = request.form.get('file_password', '')
             
             # 连接数据库
-            connection = cx_Oracle.connect(**DB_CONFIG)
+            connection = get_db_connection()
             cursor = connection.cursor()
             
             # 更新file_info表
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             update_sql = """
             UPDATE file_info SET
-                FILE_NAME = :file_name,
-                FILE_AUTHOR = :file_author,
-                STANDARD_NAME = :standard_name,
-                SEARCH_KEYWORDS = :search_keywords,
-                FILE_TAGS = :file_tags,
-                FILE_ISBN = :file_isbn,
-                FILE_PRICE_TYPE = :file_price_type,
-                FILE_PASSWORD = :file_password,
-                UPDATE_TIME = SYSDATE
-            WHERE FILE_ID = :file_id
+                file_name = ?,
+                file_author = ?,
+                standard_name = ?,
+                search_keywords = ?,
+                file_tags = ?,
+                file_isbn = ?,
+                file_price_type = ?,
+                file_password = ?,
+                update_time = ?
+            WHERE file_id = ?
             """
             
-            cursor.execute(update_sql, {
-                'file_name': file_name,
-                'file_author': file_author,
-                'standard_name': standard_name,
-                'search_keywords': search_keywords,
-                'file_tags': file_tags,
-                'file_isbn': file_isbn,
-                'file_price_type': file_price_type,
-                'file_password': file_password,
-                'file_id': file_id
-            })
+            cursor.execute(update_sql, (
+                file_name,
+                file_author,
+                standard_name,
+                search_keywords,
+                file_tags,
+                file_isbn,
+                file_price_type,
+                file_password,
+                current_time,
+                file_id
+            ))
             
             connection.commit()
             cursor.close()
@@ -242,17 +251,18 @@ def admin_edit_file():
             return jsonify({'success': True, 'message': '文件更新成功'})
             
         except Exception as e:
+            print(f"错误: {str(e)}")
             return jsonify({'success': False, 'message': '文件更新失败: ' + str(e)})
 
 @app.route('/admin/file_list')
 def admin_file_list():
     """文件列表"""
     try:
-        connection = cx_Oracle.connect(**DB_CONFIG)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # 查询文件列表
-        cursor.execute("SELECT * FROM file_info ORDER BY CREATE_TIME DESC")
+        cursor.execute("SELECT * FROM file_info ORDER BY create_time DESC")
         files = cursor.fetchall()
         
         cursor.close()
@@ -260,6 +270,7 @@ def admin_file_list():
         
         return render_template('admin_file_list.html', files=files)
     except Exception as e:
+        print(f"错误: {str(e)}")
         return render_template('admin_file_list.html', files=[])
 
 @app.route('/admin/generate_package', methods=['POST'])
@@ -272,13 +283,12 @@ def admin_generate_package():
         output_path = request.form.get('output_path', ENCRYPTED_FOLDER)
         
         # 查询选中的文件
-        connection = cx_Oracle.connect(**DB_CONFIG)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
-        placeholders = ','.join([':id' + str(i) for i in range(len(file_ids))])
-        query = "SELECT FILE_NAME, FILE_PATH, FILE_PASSWORD FROM file_info WHERE FILE_ID IN (" + placeholders + ")"
-        params = {'id' + str(i): file_id for i, file_id in enumerate(file_ids)}
-        cursor.execute(query, params)
+        placeholders = ','.join(['?' for _ in file_ids])
+        query = "SELECT file_name, file_path, file_password FROM file_info WHERE file_id IN (" + placeholders + ")"
+        cursor.execute(query, file_ids)
         files = cursor.fetchall()
         
         cursor.close()
@@ -310,22 +320,23 @@ def admin_generate_package():
         })
         
     except Exception as e:
+        print(f"错误: {str(e)}")
         return jsonify({'success': False, 'message': '压缩包生成失败: ' + str(e)})
 
 @app.route('/admin/payment_records')
 def admin_payment_records():
     """支付记录查询"""
     try:
-        connection = cx_Oracle.connect(**DB_CONFIG)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # 查询支付记录
         cursor.execute("""
-            SELECT OUT_TRADE_NO, FILE_NAME, TOTAL_AMOUNT, TRADE_STATUS, 
-                   GMT_CREATE, GMT_PAYMENT, FILE_ENCRYPT_PASSWORD
+            SELECT out_trade_no, file_name, total_amount, trade_status, 
+                   gmt_create, gmt_payment, file_encrypt_password
             FROM alipay_wap_pay_records 
-            ORDER BY GMT_CREATE DESC
-            FETCH FIRST 100 ROWS ONLY
+            ORDER BY gmt_create DESC
+            LIMIT 100
         """)
         records = cursor.fetchall()
         
@@ -334,22 +345,23 @@ def admin_payment_records():
         
         return render_template('admin_payment_records.html', records=records)
     except Exception as e:
+        print(f"错误: {str(e)}")
         return render_template('admin_payment_records.html', records=[])
 
 @app.route('/admin/api/payment_records', methods=['GET'])
 def admin_api_payment_records():
     """API: 获取支付记录"""
     try:
-        connection = cx_Oracle.connect(**DB_CONFIG)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # 查询支付记录
         cursor.execute("""
-            SELECT OUT_TRADE_NO, FILE_NAME, TOTAL_AMOUNT, TRADE_STATUS, 
-                   GMT_CREATE, GMT_PAYMENT, FILE_ENCRYPT_PASSWORD
+            SELECT out_trade_no, file_name, total_amount, trade_status, 
+                   gmt_create, gmt_payment, file_encrypt_password
             FROM alipay_wap_pay_records 
-            ORDER BY GMT_CREATE DESC
-            FETCH FIRST 100 ROWS ONLY
+            ORDER BY gmt_create DESC
+            LIMIT 100
         """)
         columns = [col[0] for col in cursor.description]
         records = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -359,6 +371,7 @@ def admin_api_payment_records():
         
         return jsonify({'success': True, 'records': records})
     except Exception as e:
+        print(f"错误: {str(e)}")
         return jsonify({'success': False, 'records': [], 'message': str(e)})
 
 @app.route('/admin/payment_config', methods=['GET', 'POST'])
@@ -366,11 +379,11 @@ def admin_payment_config():
     """支付配置管理"""
     if request.method == 'GET':
         try:
-            connection = cx_Oracle.connect(**DB_CONFIG)
+            connection = get_db_connection()
             cursor = connection.cursor()
             
             # 查询支付配置
-            cursor.execute("SELECT * FROM payment_config WHERE STATUS = 'Y' ORDER BY PRICE_ID")
+            cursor.execute("SELECT * FROM payment_config WHERE status = 'Y' ORDER BY price_id")
             configs = cursor.fetchall()
             
             cursor.close()
@@ -378,6 +391,7 @@ def admin_payment_config():
             
             return render_template('admin_payment_config.html', configs=configs)
         except Exception as e:
+            print(f"错误: {str(e)}")
             return render_template('admin_payment_config.html', configs=[])
     
     if request.method == 'POST':
@@ -390,52 +404,57 @@ def admin_payment_config():
             status = request.form.get('status', 'Y')
             
             # 连接数据库
-            connection = cx_Oracle.connect(**DB_CONFIG)
+            connection = get_db_connection()
             cursor = connection.cursor()
             
             # 检查是新增还是修改
-            cursor.execute("SELECT PRICE_ID FROM payment_config WHERE PRICE_ID = :price_id", price_id=price_id)
+            cursor.execute("SELECT price_id FROM payment_config WHERE price_id = ?", (price_id,))
             existing = cursor.fetchone()
+            
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             if existing:
                 # 更新配置
                 update_sql = """
                 UPDATE payment_config SET
-                    PRICE_TYPE = :price_type,
-                    AMOUNT = :amount,
-                    PAYMENT_URL = :payment_url,
-                    DESCRIPTION = :description,
-                    STATUS = :status,
-                    UPDATE_TIME = SYSDATE
-                WHERE PRICE_ID = :price_id
+                    price_type = ?,
+                    amount = ?,
+                    payment_url = ?,
+                    description = ?,
+                    status = ?,
+                    update_time = ?
+                WHERE price_id = ?
                 """
-                cursor.execute(update_sql, {
-                    'price_type': price_type,
-                    'amount': amount,
-                    'payment_url': payment_url,
-                    'description': description,
-                    'status': status,
-                    'price_id': price_id
-                })
+                cursor.execute(update_sql, (
+                    price_type,
+                    amount,
+                    payment_url,
+                    description,
+                    status,
+                    current_time,
+                    price_id
+                ))
             else:
                 # 新增配置
                 insert_sql = """
                 INSERT INTO payment_config (
-                    PRICE_ID, PRICE_TYPE, AMOUNT, PAYMENT_URL,
-                    DESCRIPTION, STATUS, CREATE_TIME, UPDATE_TIME
+                    price_id, price_type, amount, payment_url,
+                    description, status, create_time, update_time
                 ) VALUES (
-                    :price_id, :price_type, :amount, :payment_url,
-                    :description, :status, SYSDATE, SYSDATE
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?
                 )
                 """
-                cursor.execute(insert_sql, {
-                    'price_id': price_id,
-                    'price_type': price_type,
-                    'amount': amount,
-                    'payment_url': payment_url,
-                    'description': description,
-                    'status': status
-                })
+                cursor.execute(insert_sql, (
+                    price_id,
+                    price_type,
+                    amount,
+                    payment_url,
+                    description,
+                    status,
+                    current_time,
+                    current_time
+                ))
             
             connection.commit()
             cursor.close()
@@ -444,17 +463,18 @@ def admin_payment_config():
             return jsonify({'success': True, 'message': '配置保存成功'})
             
         except Exception as e:
+            print(f"错误: {str(e)}")
             return jsonify({'success': False, 'message': '配置保存失败: ' + str(e)})
 
 @app.route('/admin/api/payment_config', methods=['GET'])
 def admin_api_payment_config():
     """API: 获取支付配置"""
     try:
-        connection = cx_Oracle.connect(**DB_CONFIG)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # 查询支付配置
-        cursor.execute("SELECT * FROM payment_config ORDER BY PRICE_ID")
+        cursor.execute("SELECT * FROM payment_config ORDER BY price_id")
         columns = [col[0] for col in cursor.description]
         configs = [dict(zip(columns, row)) for row in cursor.fetchall()]
         
@@ -463,6 +483,7 @@ def admin_api_payment_config():
         
         return jsonify({'success': True, 'configs': configs})
     except Exception as e:
+        print(f"错误: {str(e)}")
         return jsonify({'success': False, 'configs': [], 'message': str(e)})
 
 @app.route('/admin/api/files', methods=['GET'])
@@ -473,7 +494,7 @@ def admin_api_files():
         per_page = 50
         offset = (page - 1) * per_page
         
-        connection = cx_Oracle.connect(**DB_CONFIG)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # 获取总数
@@ -482,12 +503,10 @@ def admin_api_files():
         
         # 查询文件列表（分页）
         cursor.execute("""
-            SELECT * FROM (
-                SELECT a.*, ROWNUM rn FROM (
-                    SELECT * FROM file_info ORDER BY CREATE_TIME DESC
-                ) a WHERE ROWNUM <= :end_row
-            ) WHERE rn > :start_row
-        """, start_row=offset, end_row=offset + per_page)
+            SELECT * FROM file_info 
+            ORDER BY create_time DESC
+            LIMIT ? OFFSET ?
+        """, (per_page, offset))
         
         columns = [col[0] for col in cursor.description]
         files = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -504,6 +523,7 @@ def admin_api_files():
             'total_pages': (total + per_page - 1) // per_page
         })
     except Exception as e:
+        print(f"错误: {str(e)}")
         return jsonify({'success': False, 'files': [], 'message': str(e)})
 
 @app.route('/admin/api/search_files', methods=['GET'])
@@ -515,20 +535,20 @@ def admin_api_search_files():
     per_page = 50
     offset = (page - 1) * per_page
     
-    connection = cx_Oracle.connect(**DB_CONFIG)
+    connection = get_db_connection()
     cursor = connection.cursor()
     
     # 构建查询条件
     conditions = []
-    params = {}
+    params = []
     
     if keyword:
-        conditions.append("FILE_NAME LIKE :keyword OR FILE_AUTHOR LIKE :keyword OR SEARCH_KEYWORDS LIKE :keyword")
-        params['keyword'] = '%' + keyword + '%'
+        conditions.append("(file_name LIKE ? OR file_author LIKE ? OR search_keywords LIKE ?)")
+        params.extend(['%' + keyword + '%', '%' + keyword + '%', '%' + keyword + '%'])
     
     if file_type:
-        conditions.append("FILE_PRICE_TYPE = :file_type")
-        params['file_type'] = file_type
+        conditions.append("file_price_type = ?")
+        params.append(file_type)
     
     where_clause = ' AND '.join(conditions) if conditions else '1=1'
     
@@ -539,14 +559,12 @@ def admin_api_search_files():
     
     # 查询文件列表（分页）
     query = """
-        SELECT * FROM (
-            SELECT a.*, ROWNUM rn FROM (
-                SELECT * FROM file_info WHERE """ + where_clause + """ ORDER BY CREATE_TIME DESC
-            ) a WHERE ROWNUM <= :end_row
-        ) WHERE rn > :start_row
+        SELECT * FROM file_info 
+        WHERE """ + where_clause + """
+        ORDER BY create_time DESC
+        LIMIT ? OFFSET ?
     """
-    params['end_row'] = offset + per_page
-    params['start_row'] = offset
+    params.extend([per_page, offset])
     
     cursor.execute(query, params)
     columns = [col[0] for col in cursor.description]
@@ -569,12 +587,12 @@ def admin_api_delete_file():
     """API: 删除文件"""
     file_id = request.json.get('file_id')
     
-    connection = cx_Oracle.connect(**DB_CONFIG)
+    connection = get_db_connection()
     cursor = connection.cursor()
     
     try:
         # 删除文件记录
-        cursor.execute("DELETE FROM file_info WHERE FILE_ID = :file_id", file_id=file_id)
+        cursor.execute("DELETE FROM file_info WHERE file_id = ?", (file_id,))
         connection.commit()
         
         cursor.close()
@@ -583,40 +601,43 @@ def admin_api_delete_file():
         return jsonify({'success': True, 'message': '文件删除成功'})
         
     except Exception as e:
+        print(f"错误: {str(e)}")
         return jsonify({'success': False, 'message': '文件删除失败: ' + str(e)})
 
 @app.route('/admin/initialize_data', methods=['POST'])
 def admin_initialize_data():
     """初始化数据"""
     try:
-        connection = cx_Oracle.connect(**DB_CONFIG)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         # 检查是否已初始化
-        cursor.execute("SELECT COUNT(*) FROM payment_config WHERE PRICE_ID = '1'")
+        cursor.execute("SELECT COUNT(*) FROM payment_config WHERE price_id = '1'")
         count = cursor.fetchone()[0]
         
         if count == 0:
             # 初始化支付配置
-            cursor.execute("""
-                INSERT INTO payment_config (
-                    PRICE_ID, PRICE_TYPE, AMOUNT, PAYMENT_URL,
-                    DESCRIPTION, STATUS, CREATE_TIME, UPDATE_TIME
-                ) VALUES (
-                    '1', '标准版', 3.00, '/payment',
-                    '标准版支付配置', 'Y', SYSDATE, SYSDATE
-                )
-            """)
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             cursor.execute("""
                 INSERT INTO payment_config (
-                    PRICE_ID, PRICE_TYPE, AMOUNT, PAYMENT_URL,
-                    DESCRIPTION, STATUS, CREATE_TIME, UPDATE_TIME
+                    price_id, price_type, amount, payment_url,
+                    description, status, create_time, update_time
+                ) VALUES (
+                    '1', '标准版', 3.00, '/payment',
+                    '标准版支付配置', 'Y', ?, ?
+                )
+            """, (current_time, current_time))
+            
+            cursor.execute("""
+                INSERT INTO payment_config (
+                    price_id, price_type, amount, payment_url,
+                    description, status, create_time, update_time
                 ) VALUES (
                     '2', '高级版', 5.00, '/payment',
-                    '高级版支付配置', 'Y', SYSDATE, SYSDATE
+                    '高级版支付配置', 'Y', ?, ?
                 )
-            """)
+            """, (current_time, current_time))
             
             connection.commit()
             cursor.close()
@@ -627,6 +648,7 @@ def admin_initialize_data():
             return jsonify({'success': False, 'message': '数据已初始化'})
             
     except Exception as e:
+        print(f"错误: {str(e)}")
         return jsonify({'success': False, 'message': '数据初始化失败: ' + str(e)})
 
 if __name__ == '__main__':

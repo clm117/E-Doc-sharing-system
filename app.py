@@ -1,22 +1,20 @@
 # 导入必要的模块
 import os  # 导入操作系统相关模块
 from io import BytesIO  # 从io模块导入BytesIO，用于处理字节流
+import sqlite3  # 导入sqlite3模块，用于连接SQLite数据库
 
 # 检查并导入必要的依赖包
 try:  # 尝试导入Flask和qrcode模块
     from flask import Flask, render_template, Response  # 导入Flask核心类、模板渲染函数和响应类
     import qrcode  # 导入qrcode库，用于生成二维码
-    ORACLE_AVAILABLE = True  # 初始化Oracle可用标志为True
-    try:  # 尝试导入cx_Oracle模块，用于连接Oracle数据库
-        import cx_Oracle  # 导入cx_Oracle模块
-    except ImportError:  # 如果导入失败
-        ORACLE_AVAILABLE = False  # 设置Oracle可用标志为False
-        print("警告：未安装cx_Oracle，将使用模拟数据模式")  # 打印警告信息
 except ImportError as e:  # 如果导入Flask或qrcode失败
     print(f"错误：缺少必要的依赖包 - {str(e)}")  # 打印错误信息
     print("请先运行以下命令安装依赖：")  # 提示用户安装依赖
     print("pip install flask qrcode[pil]")  # 显示安装命令
     exit(1)  # 退出程序，返回错误码1
+
+# SQLite数据库路径
+SQLITE_DB_PATH = 'docshare.db'
 
 # 创建Flask应用实例
 app = Flask(__name__)  # 实例化Flask应用，__name__表示当前模块名
@@ -24,18 +22,14 @@ app = Flask(__name__)  # 实例化Flask应用，__name__表示当前模块名
 # 配置日志
 app.debug = True  # 设置调试模式为True，便于开发调试
 
-# Oracle数据库连接配置字典
-DB_CONFIG = {
-    'user': 'system',               # 数据库用户名
-    'password': 'oracle123',        # 数据库密码
-    # DSN配置说明：
-    # 方法1: 直接使用数据库连接字符串格式: host:port/service_name
-    # 方法2: 使用tnsnames.ora文件中的服务名
-    # 方法3: 完整的连接描述符
-    'dsn': 'localhost:1521/ORCLM',   # 推荐使用：主机名:端口/服务名，使用正确的服务名
-    # 'dsn': cx_Oracle.makedsn('localhost', 1521, service_name='orcl'),  # 另一种写法
-    'encoding': 'UTF-8'             # 字符编码
-}
+# 获取数据库连接
+def get_db_connection():
+    """获取SQLite数据库连接"""
+    try:
+        return sqlite3.connect(SQLITE_DB_PATH)
+    except Exception as e:
+        print(f"SQLite连接失败: {str(e)}")
+        return None
 
 # 手机页面URL地址(扫描二维码后跳转的支付页面地址)
 MOBILE_PAGE_URL = "http://192.168.100.174:5000/mobile_payment_simple"  # 设置二维码指向的简洁版手机支付页面URL，使用实际IP地址
@@ -81,10 +75,12 @@ def index():
     
     # 检查支付状态
     amount = 3.00
-    if ORACLE_AVAILABLE:
-        try:
-            # 连接到Oracle数据库
-            connection = cx_Oracle.connect(**DB_CONFIG)
+    try:
+        # 连接到SQLite数据库
+        connection = get_db_connection()
+        if not connection:
+            print("无法连接数据库")
+        else:
             cursor = connection.cursor()
             
             # 关键修改：查询file_id + user_id对应的待支付记录
@@ -94,13 +90,13 @@ def index():
                 SELECT a.session_id, a.out_trade_no, a.file_encrypt_password, a.total_amount, a.trade_status, b.file_name
                 FROM alipay_wap_pay_records a
                 LEFT JOIN file_info b ON a.file_id = b.file_id
-                WHERE a.file_id = :file_id
-                AND a.user_id = :user_id
+                WHERE a.file_id = ?
+                AND a.user_id = ?
                 AND a.trade_status = 'TRADE_PENDING'
                 ORDER BY a.gmt_create DESC
-                FETCH FIRST 1 ROWS ONLY
+                LIMIT 1
                 """
-                cursor.execute(query, file_id=file_id, user_id=user_id)
+                cursor.execute(query, (file_id, user_id))
                 result = cursor.fetchone()
                 
                 if result:
@@ -113,7 +109,7 @@ def index():
                     print(f"没有找到待支付记录，生成新session_id: {session_id}, user_id: {user_id}, file_id: {file_id}")
                     
                     # 获取文件信息
-                    cursor.execute("SELECT file_name, file_password FROM file_info WHERE file_id = :file_id", file_id=file_id)
+                    cursor.execute("SELECT file_name, file_password FROM file_info WHERE file_id = ?", (file_id,))
                     file_result = cursor.fetchone()
                     if file_result:
                         file_name, file_password = file_result
@@ -133,28 +129,17 @@ def index():
                             gmt_payment, gmt_refund, gmt_close, file_id, session_id, user_id,
                             file_name, file_encrypt_password, trade_status
                         ) VALUES (
-                            '10000', 'Success', NULL, NULL, NULL, :out_trade_no, 
-                            '2088102146225135', 'test@alipay.com', '2088101122136669', 'test_seller@alipay.com', 
-                            :total_amount, :receipt_amount, :invoice_amount, :buyer_pay_amount, 
-                            0, NULL, :subject, :body, SYSDATE, 
-                            NULL, NULL, NULL, :file_id, :session_id, :user_id,
-                            :file_name, :file_password, 'TRADE_PENDING'
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                         )
                         """
-                        
-                        cursor.execute(insert_sql, 
-                                     out_trade_no=out_trade_no,
-                                     total_amount=amount,
-                                     receipt_amount=amount,
-                                     invoice_amount=amount,
-                                     buyer_pay_amount=amount,
-                                     subject="学习资料购买",
-                                     body=f"购买{file_name}",
-                                     file_id=file_id,
-                                     session_id=session_id,
-                                     user_id=user_id,
-                                     file_name=file_name,
-                                     file_password=file_password)
+                        cursor.execute(insert_sql, (
+                            '10000', 'Success', None, None, None, out_trade_no, 
+                            '2088102146225135', 'test@alipay.com', '2088101122136669', 'test_seller@alipay.com', 
+                            amount, amount, amount, amount, 
+                            0, None, "学习资料购买", f"购买{file_name}", time.strftime('%Y-%m-%d %H:%M:%S'), 
+                            None, None, None, file_id, session_id, user_id,
+                            file_name, file_password, 'TRADE_PENDING'
+                        ))
                         
                         connection.commit()
                         print(f"创建待支付记录成功: {out_trade_no}, file_id: {file_id}, session_id: {session_id}, user_id: {user_id}")
@@ -167,12 +152,12 @@ def index():
             query = """
             SELECT a.out_trade_no, a.file_encrypt_password, a.total_amount
             FROM alipay_wap_pay_records a
-            WHERE a.session_id = :session_id
+            WHERE a.session_id = ?
             AND a.trade_status = 'TRADE_SUCCESS'
             ORDER BY a.gmt_create DESC
-            FETCH FIRST 1 ROWS ONLY
+            LIMIT 1
             """
-            cursor.execute(query, session_id=session_id)
+            cursor.execute(query, (session_id,))
             result = cursor.fetchone()
             
             if result:
@@ -193,8 +178,8 @@ def index():
             # 关闭游标和连接
             cursor.close()
             connection.close()
-        except Exception as db_e:
-            print(f"检查支付状态失败: {str(db_e)}")
+    except Exception as db_e:
+        print(f"检查支付状态失败: {str(db_e)}")
     
     # 渲染首页模板，传递session_id、amount、file_id和user_id
     response = app.make_response(render_template('index.html', session_id=session_id, amount=amount, file_id=file_id))
@@ -219,33 +204,35 @@ def payment():
     file_price_type = request.args.get('file_price_type', '1')
     
     # 从payment_config表获取金额
-    if ORACLE_AVAILABLE:  # 如果Oracle数据库可用
-        try:
-            # 连接到Oracle数据库
-            connection = cx_Oracle.connect(**DB_CONFIG)
+    try:
+        # 连接到SQLite数据库
+        connection = get_db_connection()
+        if not connection:
+            print("无法连接数据库")
+        else:
             cursor = connection.cursor()
             
             if file_id:  # 如果有file_id参数，先获取文件的价格类型
-                cursor.execute("SELECT FILE_PRICE_TYPE FROM file_info WHERE FILE_ID = :file_id", file_id=file_id)
+                cursor.execute("SELECT FILE_PRICE_TYPE FROM file_info WHERE FILE_ID = ?", (file_id,))
                 file_type_result = cursor.fetchone()
                 if file_type_result:
                     file_price_type = file_type_result[0]
                     print(f"从file_info表获取文件价格类型: {file_price_type}")
             
             # 根据价格类型查询对应的金额
-            query = "SELECT amount FROM payment_config WHERE status = 'Y' AND PRICE_TYPE = :price_type"
-            cursor.execute(query, price_type=file_price_type)
+            query = "SELECT amount FROM payment_config WHERE status = 'Y' AND PRICE_TYPE = ?"
+            cursor.execute(query, (file_price_type,))
             result = cursor.fetchone()
             
             if result and result[0]:  # 如果查询到了有效的amount
                 amount = result[0]  # 使用数据库中的金额
-                print(f"从payment_config表获取金额: {amount} (价格类型: {file_price_type})")  # 打印日志
+                print(f"从payment_config表获取金额: {amount} (价格类型: {file_price_type})" )  # 打印日志
             
             # 关闭游标和连接
             cursor.close()
             connection.close()
-        except Exception as db_e:
-            print(f"从payment_config表读取amount失败，使用默认金额: {str(db_e)}")  # 打印数据库错误日志
+    except Exception as db_e:
+        print(f"从payment_config表读取amount失败，使用默认金额: {str(db_e)}")  # 打印数据库错误日志
     
     # 渲染支付页面模板，并传递金额参数
     return render_template('payment.html', amount=amount)  # 返回渲染后的payment.html模板
@@ -272,33 +259,35 @@ def mobile_payment_simple():
     file_price_type = request.args.get('file_price_type', '1')
     
     # 从payment_config表获取金额
-    if ORACLE_AVAILABLE:  # 如果Oracle数据库可用
-        try:
-            # 连接到Oracle数据库
-            connection = cx_Oracle.connect(**DB_CONFIG)
+    try:
+        # 连接到SQLite数据库
+        connection = get_db_connection()
+        if not connection:
+            print("无法连接数据库")
+        else:
             cursor = connection.cursor()
             
             if file_id:  # 如果有file_id参数，先获取文件的价格类型
-                cursor.execute("SELECT FILE_PRICE_TYPE FROM file_info WHERE FILE_ID = :file_id", file_id=file_id)
+                cursor.execute("SELECT FILE_PRICE_TYPE FROM file_info WHERE FILE_ID = ?", (file_id,))
                 file_type_result = cursor.fetchone()
                 if file_type_result:
                     file_price_type = file_type_result[0]
                     print(f"从file_info表获取文件价格类型: {file_price_type}")
             
             # 根据价格类型查询对应的金额
-            query = "SELECT amount FROM payment_config WHERE status = 'Y' AND PRICE_TYPE = :price_type"
-            cursor.execute(query, price_type=file_price_type)
+            query = "SELECT amount FROM payment_config WHERE status = 'Y' AND PRICE_TYPE = ?"
+            cursor.execute(query, (file_price_type,))
             result = cursor.fetchone()
             
             if result and result[0]:  # 如果查询到了有效的amount
                 amount = result[0]  # 使用数据库中的金额
-                print(f"从payment_config表获取金额: {amount} (价格类型: {file_price_type})")  # 打印日志
+                print(f"从payment_config表获取金额: {amount} (价格类型: {file_price_type})" )  # 打印日志
             
             # 关闭游标和连接
             cursor.close()
             connection.close()
-        except Exception as db_e:
-            print(f"从payment_config表读取amount失败，使用默认金额: {str(db_e)}")  # 打印数据库错误日志
+    except Exception as db_e:
+        print(f"从payment_config表读取amount失败，使用默认金额: {str(db_e)}")  # 打印数据库错误日志
     
     # 渲染简洁版手机支付页面模板，并传递金额参数
     return render_template('mobile_payment_simple.html', amount=amount)  # 返回渲染后的mobile_payment_simple.html模板
@@ -324,27 +313,30 @@ def initiate_payment():
     file_price_type = request.args.get('file_price_type', '1')
     
     # 从payment_config表获取金额
-    if ORACLE_AVAILABLE:  # 如果Oracle数据库可用
-        try:
-            # 连接到Oracle数据库
-            connection = cx_Oracle.connect(**DB_CONFIG)
+    try:
+        # 连接到SQLite数据库
+        connection = get_db_connection()
+        if not connection:
+            print("无法连接数据库")
+            return "数据库不可用", 500
+        else:
             cursor = connection.cursor()
             
             if file_id:  # 如果有file_id参数，先获取文件的价格类型
-                cursor.execute("SELECT FILE_PRICE_TYPE FROM file_info WHERE FILE_ID = :file_id", file_id=file_id)
+                cursor.execute("SELECT FILE_PRICE_TYPE FROM file_info WHERE FILE_ID = ?", (file_id,))
                 file_type_result = cursor.fetchone()
                 if file_type_result:
                     file_price_type = file_type_result[0]
                     print(f"从file_info表获取文件价格类型: {file_price_type}")
             
             # 根据价格类型查询对应的金额
-            query = "SELECT amount FROM payment_config WHERE status = 'Y' AND PRICE_TYPE = :price_type"
-            cursor.execute(query, price_type=file_price_type)
+            query = "SELECT amount FROM payment_config WHERE status = 'Y' AND PRICE_TYPE = ?"
+            cursor.execute(query, (file_price_type,))
             result = cursor.fetchone()
             
             if result and result[0]:  # 如果查询到了有效的amount
                 amount = result[0]  # 使用数据库中的金额
-                print(f"从payment_config表获取金额: {amount} (价格类型: {file_price_type})")  # 打印日志
+                print(f"从payment_config表获取金额: {amount} (价格类型: {file_price_type})" )  # 打印日志
             
             # 生成随机订单号
             import random
@@ -354,7 +346,7 @@ def initiate_payment():
             # 优先使用传递过来的file_id参数，如果没有则随机获取一个
             file_result = None
             if file_id:  # 如果有传递file_id参数
-                cursor.execute("SELECT file_id, file_name, file_password FROM file_info WHERE file_id = :file_id", file_id=file_id)
+                cursor.execute("SELECT file_id, file_name, file_password FROM file_info WHERE file_id = ?", (file_id,))
                 file_result = cursor.fetchone()
                 if file_result:
                     file_id, file_name, file_password = file_result
@@ -362,7 +354,7 @@ def initiate_payment():
             
             # 如果没有传递file_id参数或传递的file_id不存在，则随机获取一个
             if not file_result:
-                cursor.execute("SELECT file_id, file_name, file_password FROM file_info ORDER BY DBMS_RANDOM.RANDOM FETCH FIRST 1 ROWS ONLY")
+                cursor.execute("SELECT file_id, file_name, file_password FROM file_info ORDER BY RANDOM() LIMIT 1")
                 file_result = cursor.fetchone()
                 if file_result:
                     file_id, file_name, file_password = file_result
@@ -383,12 +375,7 @@ def initiate_payment():
                     gmt_payment, gmt_refund, gmt_close, file_id, session_id,
                     file_name, file_encrypt_password
                 ) VALUES (
-                    '10000', 'Success', NULL, NULL, :trade_no, :out_trade_no, 
-                    '2088102146225135', 'test@alipay.com', '2088101122136669', 'test_seller@alipay.com', 
-                    :total_amount, :receipt_amount, :invoice_amount, :buyer_pay_amount, 
-                    0, NULL, :subject, :body, SYSDATE, 
-                    SYSDATE, NULL, NULL, :file_id, :session_id,
-                    :file_name, :file_password
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """
                 
@@ -396,19 +383,14 @@ def initiate_payment():
                 trade_no = f"20260112{random.randint(1000000000000000000, 9999999999999999999)}"
                 
                 # 执行插入
-                cursor.execute(insert_sql, 
-                             trade_no=trade_no,
-                             out_trade_no=out_trade_no,
-                             total_amount=amount,
-                             receipt_amount=amount,
-                             invoice_amount=amount,
-                             buyer_pay_amount=amount,
-                             subject="学习资料购买",
-                             body=f"购买{file_name}",
-                             file_id=file_id,
-                             session_id=session_id,
-                             file_name=file_name,
-                             file_password=file_password)
+                cursor.execute(insert_sql, (
+                    '10000', 'Success', None, None, trade_no, out_trade_no, 
+                    '2088102146225135', 'test@alipay.com', '2088101122136669', 'test_seller@alipay.com', 
+                    amount, amount, amount, amount, 
+                    0, None, "学习资料购买", f"购买{file_name}", time.strftime('%Y-%m-%d %H:%M:%S'), 
+                    time.strftime('%Y-%m-%d %H:%M:%S'), None, None, file_id, session_id,
+                    file_name, file_password
+                ))
                 
                 # 提交事务
                 connection.commit()
@@ -430,11 +412,9 @@ def initiate_payment():
                 connection.close()
                 return "未找到有效的文件信息", 404
             
-        except Exception as db_e:
-            print(f"支付初始化失败: {str(db_e)}")  # 打印数据库错误日志
-            return f"支付初始化失败: {str(db_e)}", 500
-    else:
-        return "数据库不可用", 500
+    except Exception as db_e:
+        print(f"支付初始化失败: {str(db_e)}")  # 打印数据库错误日志
+        return f"支付初始化失败: {str(db_e)}", 500
 
 # 定义二维码生成路由
 @app.route('/qrcode')  # 装饰器，定义/qrcode路径路由
@@ -501,14 +481,13 @@ def check_payment_status():
     # 获取file_id参数（可选）
     file_id = request.args.get('file_id')
     
-    # 如果Oracle不可用，直接返回模拟数据
-    if not ORACLE_AVAILABLE:  # 检查Oracle是否可用
-        print("Oracle不可用，使用模拟数据")  # 打印日志
-        return jsonify({'success': True, 'message': '支付成功', 'file_name': '模拟文件', 'file_password': 'test123456', 'amount': 3.00}), 200
-    
     try:  # 尝试连接数据库并查询支付状态
-        # 连接到Oracle数据库
-        connection = cx_Oracle.connect(**DB_CONFIG)  # 使用配置字典连接Oracle数据库
+        # 连接到数据库
+        connection = get_db_connection()  # 使用配置字典连接数据库
+        if not connection:
+            print("无法连接数据库")
+            return jsonify({'success': False, 'message': '数据库不可用'}), 500
+        
         cursor = connection.cursor()  # 创建游标，用于执行SQL语句
         
         # 查询该session_id对应的支付记录
@@ -516,25 +495,25 @@ def check_payment_status():
             query = """
             SELECT a.out_trade_no, a.file_encrypt_password, a.total_amount, b.file_name
             FROM alipay_wap_pay_records a
-            LEFT JOIN learning_materials b ON a.file_id = b.file_id
-            WHERE a.session_id = :session_id
-            AND a.file_id = :file_id
+            LEFT JOIN file_info b ON a.file_id = b.file_id
+            WHERE a.session_id = ?
+            AND a.file_id = ?
             AND a.trade_status = 'TRADE_SUCCESS'
             ORDER BY a.gmt_create DESC
-            FETCH FIRST 1 ROWS ONLY
+            LIMIT 1
             """
-            cursor.execute(query, session_id=session_id, file_id=file_id)
+            cursor.execute(query, (session_id, file_id))
         else:
             query = """
             SELECT a.out_trade_no, a.file_encrypt_password, a.total_amount, b.file_name
             FROM alipay_wap_pay_records a
-            LEFT JOIN learning_materials b ON a.file_id = b.file_id
-            WHERE a.session_id = :session_id
+            LEFT JOIN file_info b ON a.file_id = b.file_id
+            WHERE a.session_id = ?
             AND a.trade_status = 'TRADE_SUCCESS'
             ORDER BY a.gmt_create DESC
-            FETCH FIRST 1 ROWS ONLY
+            LIMIT 1
             """
-            cursor.execute(query, session_id=session_id)
+            cursor.execute(query, (session_id,))
         
         result = cursor.fetchone()
         
@@ -590,14 +569,16 @@ def alipay_wap_pay():
     out_trade_no = f"ORD{int(time.time() * 1000)}{random.randint(1000, 9999)}"
     trade_no = f"20260112{random.randint(1000000000000000000, 9999999999999999999)}"
     
-    if ORACLE_AVAILABLE:
-        try:
-            connection = cx_Oracle.connect(**DB_CONFIG)
+    try:
+        connection = get_db_connection()
+        if not connection:
+            print("无法连接数据库")
+        else:
             cursor = connection.cursor()
             
             # 查询金额
-            query = "SELECT amount FROM payment_config WHERE status = 'Y' AND PRICE_TYPE = :price_type"
-            cursor.execute(query, price_type=file_price_type)
+            query = "SELECT amount FROM payment_config WHERE status = 'Y' AND PRICE_TYPE = ?"
+            cursor.execute(query, (file_price_type,))
             result = cursor.fetchone()
             if result and result[0]:
                 amount = result[0]
@@ -605,14 +586,14 @@ def alipay_wap_pay():
             
             # 获取文件信息
             if file_id:
-                cursor.execute("SELECT file_name, file_password FROM file_info WHERE file_id = :file_id", file_id=file_id)
+                cursor.execute("SELECT file_name, file_password FROM file_info WHERE file_id = ?", (file_id,))
                 file_result = cursor.fetchone()
                 if file_result:
                     file_name, file_password = file_result
                     print(f"使用传递的文件: {file_id}, 文件名: {file_name}")
             else:
                 # 随机获取一个文件
-                cursor.execute("SELECT file_name, file_password FROM file_info ORDER BY DBMS_RANDOM.RANDOM FETCH FIRST 1 ROWS ONLY")
+                cursor.execute("SELECT file_name, file_password FROM file_info ORDER BY RANDOM() LIMIT 1")
                 file_result = cursor.fetchone()
                 if file_result:
                     file_name, file_password = file_result
@@ -628,26 +609,18 @@ def alipay_wap_pay():
                 gmt_payment, gmt_refund, gmt_close, file_id, session_id,
                 file_name, file_encrypt_password, trade_status
             ) VALUES (
-                '10000', 'Success', NULL, NULL, :trade_no, :out_trade_no, 
-                '2088102146225135', 'test@alipay.com', '2088101122136669', 'test_seller@alipay.com', 
-                :total_amount, :receipt_amount, :invoice_amount, :buyer_pay_amount, 
-                0, NULL, '学习资料购买', '购买学习资料', SYSDATE, 
-                NULL, NULL, NULL, :file_id, :session_id,
-                :file_name, :file_password, 'TRADE_PENDING'
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """
             
-            cursor.execute(insert_sql, 
-                         trade_no=trade_no,
-                         out_trade_no=out_trade_no,
-                         total_amount=amount,
-                         receipt_amount=amount,
-                         invoice_amount=amount,
-                         buyer_pay_amount=amount,
-                         file_id=file_id,
-                         session_id=session_id,
-                         file_name=file_name,
-                         file_password=file_password)
+            cursor.execute(insert_sql, (
+                '10000', 'Success', None, None, trade_no, out_trade_no, 
+                '2088102146225135', 'test@alipay.com', '2088101122136669', 'test_seller@alipay.com', 
+                amount, amount, amount, amount, 
+                0, None, '学习资料购买', '购买学习资料', time.strftime('%Y-%m-%d %H:%M:%S'), 
+                None, None, None, file_id, session_id,
+                file_name, file_password, 'TRADE_PENDING'
+            ))
             
             connection.commit()
             
@@ -655,8 +628,8 @@ def alipay_wap_pay():
             
             cursor.close()
             connection.close()
-        except Exception as e:
-            print(f"数据库查询失败: {str(e)}")
+    except Exception as e:
+        print(f"数据库查询失败: {str(e)}")
     
     # 4. 准备passback_params（关键：将session_id和file_id传递给支付宝，不再上传密码）
     passback_params = {
@@ -764,13 +737,15 @@ def alipay_notify():
     print(f"交易状态: {trade_status}, 订单号: {out_trade_no}, session_id: {session_id}, file_id: {file_id}")
     
     # 4. 更新交易记录
-    if ORACLE_AVAILABLE:
-        try:
-            connection = cx_Oracle.connect(**DB_CONFIG)
+    try:
+        connection = get_db_connection()
+        if not connection:
+            print("无法连接数据库")
+        else:
             cursor = connection.cursor()
             
             # 检查订单是否存在
-            cursor.execute("SELECT COUNT(*), trade_status FROM alipay_wap_pay_records WHERE out_trade_no = :out_trade_no", out_trade_no=out_trade_no)
+            cursor.execute("SELECT COUNT(*), trade_status FROM alipay_wap_pay_records WHERE out_trade_no = ?", (out_trade_no,))
             result = cursor.fetchone()
             count = result[0]
             current_status = result[1] if len(result) > 1 else None
@@ -787,30 +762,18 @@ def alipay_notify():
                     gmt_payment, gmt_refund, gmt_close, file_id, session_id,
                     file_name, file_encrypt_password, trade_status
                 ) VALUES (
-                    '10000', 'Success', NULL, NULL, :trade_no, :out_trade_no, 
-                    :buyer_id, :buyer_logon_id, '2088101122136669', 'test_seller@alipay.com', 
-                    :total_amount, :total_amount, :total_amount, :total_amount, 
-                    0, NULL, '学习资料购买', '购买学习资料', SYSDATE, 
-                    TO_TIMESTAMP(:gmt_payment, 'YYYY-MM-DD HH24:MI:SS'), NULL, NULL, 
-                    :file_id, :session_id,
-                    :file_name, :file_password, 'TRADE_SUCCESS'
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """
                 
-                cursor.execute(insert_sql, 
-                             trade_no=trade_no,
-                             out_trade_no=out_trade_no,
-                             total_amount=total_amount,
-                             receipt_amount=total_amount,
-                             invoice_amount=total_amount,
-                             buyer_pay_amount=total_amount,
-                             buyer_id=buyer_id,
-                             buyer_logon_id=buyer_logon_id,
-                             gmt_payment=gmt_payment,
-                             file_id=file_id,  # 从passback_params获取
-                             session_id=session_id,  # 从passback_params获取
-                             file_name=file_name,  # 从passback_params获取
-                             file_password=file_password)  # 从passback_params获取
+                cursor.execute(insert_sql, (
+                    '10000', 'Success', None, None, trade_no, out_trade_no, 
+                    buyer_id, buyer_logon_id, '2088101122136669', 'test_seller@alipay.com', 
+                    total_amount, total_amount, total_amount, total_amount, 
+                    0, None, '学习资料购买', '购买学习资料', time.strftime('%Y-%m-%d %H:%M:%S'), 
+                    gmt_payment, None, None, file_id, session_id,
+                    file_name, file_password, 'TRADE_SUCCESS'
+                ))
             else:
                 print("订单已存在，检查状态")
                 # 关键修改：只更新TRADE_SUCCESS状态的订单
@@ -820,34 +783,35 @@ def alipay_notify():
                         # 更新为TRADE_SUCCESS
                         update_sql = """
                         UPDATE alipay_wap_pay_records 
-                        SET trade_status = :trade_status,
-                            trade_no = :trade_no,
-                            gmt_payment = TO_TIMESTAMP(:gmt_payment, 'YYYY-MM-DD HH24:MI:SS'),
-                            buyer_id = :buyer_id,
-                            buyer_logon_id = :buyer_logon_id,
-                            total_amount = :total_amount,
-                            receipt_amount = :receipt_amount,
-                            buyer_pay_amount = :buyer_pay_amount
-                        WHERE out_trade_no = :out_trade_no
+                        SET trade_status = ?, 
+                            trade_no = ?, 
+                            gmt_payment = ?, 
+                            buyer_id = ?, 
+                            buyer_logon_id = ?, 
+                            total_amount = ?, 
+                            receipt_amount = ?, 
+                            buyer_pay_amount = ? 
+                        WHERE out_trade_no = ?
                         """
                         
-                        cursor.execute(update_sql, 
-                                     trade_status='TRADE_SUCCESS',
-                                     trade_no=trade_no,
-                                     gmt_payment=gmt_payment,
-                                     buyer_id=buyer_id,
-                                     buyer_logon_id=buyer_logon_id,
-                                     total_amount=total_amount,
-                                     receipt_amount=total_amount,
-                                     buyer_pay_amount=total_amount,
-                                     out_trade_no=out_trade_no)
+                        cursor.execute(update_sql, (
+                            'TRADE_SUCCESS',
+                            trade_no,
+                            gmt_payment,
+                            buyer_id,
+                            buyer_logon_id,
+                            total_amount,
+                            total_amount,
+                            total_amount,
+                            out_trade_no
+                        ))
                         
                         print(f"订单状态更新为TRADE_SUCCESS: {out_trade_no}")
                     else:
                         print(f"订单状态已经是TRADE_SUCCESS，跳过更新: {out_trade_no}")
                 else:
                     print(f"订单状态不是TRADE_SUCCESS，跳过更新: {out_trade_no}, 状态: {trade_status}")
-            
+                
             connection.commit()
             
             print(f"交易记录更新成功: {out_trade_no}")
@@ -855,9 +819,9 @@ def alipay_notify():
             cursor.close()
             connection.close()
             
-        except Exception as e:
-            print(f"数据库更新失败: {str(e)}")
-            return 'fail'
+    except Exception as e:
+        print(f"数据库更新失败: {str(e)}")
+        return 'fail'
     
     # 5. 返回success给支付宝
     return 'success'
@@ -902,17 +866,20 @@ def alipay_return():
     print(f"交易状态: {trade_status}, 订单号: {out_trade_no}, session_id: {request_session_id}")
     
     # 4. 查询交易记录
-    if ORACLE_AVAILABLE:
-        try:
-            connection = cx_Oracle.connect(**DB_CONFIG)
+    try:
+        connection = get_db_connection()
+        if not connection:
+            print("无法连接数据库")
+            return render_template('error.html', message='数据库不可用')
+        else:
             cursor = connection.cursor()
             
             query = """
             SELECT file_name, file_encrypt_password, total_amount, trade_status, session_id
             FROM alipay_wap_pay_records
-            WHERE out_trade_no = :out_trade_no
+            WHERE out_trade_no = ?
             """
-            cursor.execute(query, out_trade_no=out_trade_no)
+            cursor.execute(query, (out_trade_no,))
             result = cursor.fetchone()
             
             cursor.close()
@@ -944,11 +911,9 @@ def alipay_return():
                 print("未找到交易记录")
                 return render_template('error.html', message='未找到交易记录')
                 
-        except Exception as e:
-            print(f"数据库查询失败: {str(e)}")
-            return render_template('error.html', message='查询失败')
-    else:
-        return render_template('error.html', message='数据库不可用')
+    except Exception as e:
+        print(f"数据库查询失败: {str(e)}")
+        return render_template('error.html', message='查询失败')
 
 # 定义支付取消路由
 @app.route('/payment_cancel')
@@ -958,6 +923,7 @@ def payment_cancel():
     用户在支付宝点击取消支付后，会跳转到此接口
     """
     from flask import request
+    import time
     
     # 获取取消的订单号
     out_trade_no = request.args.get('out_trade_no')
@@ -965,26 +931,30 @@ def payment_cancel():
     print(f"支付取消，订单号: {out_trade_no}")
     
     # 更新交易状态
-    if ORACLE_AVAILABLE and out_trade_no:
+    if out_trade_no:
         try:
-            connection = cx_Oracle.connect(**DB_CONFIG)
-            cursor = connection.cursor()
-            
-            update_sql = """
-            UPDATE alipay_wap_pay_records 
-            SET trade_status = 'TRADE_CLOSED',
-                gmt_close = SYSDATE
-            WHERE out_trade_no = :out_trade_no
-            """
-            
-            cursor.execute(update_sql, out_trade_no=out_trade_no)
-            connection.commit()
-            
-            cursor.close()
-            connection.close()
-            
-            print("交易状态更新为已关闭")
-            
+            connection = get_db_connection()
+            if not connection:
+                print("无法连接数据库")
+            else:
+                cursor = connection.cursor()
+                
+                update_sql = """
+                UPDATE alipay_wap_pay_records 
+                SET trade_status = 'TRADE_CLOSED', 
+                    gmt_close = ? 
+                WHERE out_trade_no = ?
+                """
+                
+                cursor.execute(update_sql, (time.strftime('%Y-%m-%d %H:%M:%S'), out_trade_no))
+                
+                connection.commit()
+                
+                cursor.close()
+                connection.close()
+                
+                print("交易状态更新为已关闭")
+                
         except Exception as e:
             print(f"数据库更新失败: {str(e)}")
     

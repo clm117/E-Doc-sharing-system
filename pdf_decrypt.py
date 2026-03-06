@@ -20,21 +20,8 @@ logger = logging.getLogger(__name__)
 SOURCE_DIR = r"D:\Program Files (x86)\Trae CN\111code\20260123\原加密文件"
 DEST_DIR = r"D:\Program Files (x86)\Trae CN\111code\20260123\压缩加密文件"
 
-# Oracle数据库连接配置
-DB_CONFIG = {
-    'user': 'system',               # 数据库用户名
-    'password': 'oracle123',        # 数据库密码
-    'dsn': 'localhost:1521/ORCLM',   # 主机名:端口/服务名
-    'encoding': 'UTF-8'             # 字符编码
-}
-
-# 检查cx_Oracle模块
-ORACLE_AVAILABLE = False
-try:
-    import cx_Oracle
-    ORACLE_AVAILABLE = True
-except ImportError:
-    print("警告：未安装cx_Oracle，将无法连接Oracle数据库")
+# SQLite数据库路径
+SQLITE_DB_PATH = 'docshare.db'
 
 # Flask服务器地址
 FLASK_SERVER = "http://127.0.0.1:5000"
@@ -94,26 +81,23 @@ def get_password_from_flask():
 
 def get_password_from_db(file_name):
     """
-    从Oracle数据库的file_info表中获取密码
+    从SQLite数据库的file_info表中获取密码
     :param file_name: 文件名
     :return: 密码字符串
     """
-    if not ORACLE_AVAILABLE:
-        logger.info("Oracle数据库不可用，无法从file_info表获取密码")
-        return None
-    
     # 重试机制，最多重试3次
     for retry in range(3):
         connection = None
         cursor = None
         
         try:
-            # 连接到Oracle数据库
-            connection = cx_Oracle.connect(**DB_CONFIG)
+            # 连接到SQLite数据库
+            import sqlite3
+            connection = sqlite3.connect(SQLITE_DB_PATH)
             cursor = connection.cursor()
             
             # 根据文件名查询密码
-            cursor.execute("SELECT file_password FROM file_info WHERE file_name = :file_name", file_name=file_name)
+            cursor.execute("SELECT file_password FROM file_info WHERE file_name = ?", (file_name,))
             result = cursor.fetchone()
             
             if result:
@@ -121,7 +105,7 @@ def get_password_from_db(file_name):
                 return password
             else:
                 # 尝试使用LIKE查询，可能文件名有空格或其他差异
-                cursor.execute("SELECT file_password FROM file_info WHERE file_name LIKE :file_name", file_name=f"%{file_name}%")
+                cursor.execute("SELECT file_password FROM file_info WHERE file_name LIKE ?", (f"%{file_name}%",))
                 result = cursor.fetchone()
                 if result:
                     password = result[0]
