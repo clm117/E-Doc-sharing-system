@@ -32,7 +32,7 @@ def get_db_connection():
         return None
 
 # 手机页面URL地址(扫描二维码后跳转的支付页面地址)
-MOBILE_PAGE_URL = "http://192.168.100.174:5000/mobile_payment_simple"  # 设置二维码指向的简洁版手机支付页面URL，使用实际IP地址
+MOBILE_PAGE_URL = "https://e-doc-sharing-system.vercel.app/mobile_payment_simple"  # 设置二维码指向的简洁版手机支付页面URL，使用Vercel域名
 
 import uuid
 
@@ -432,7 +432,7 @@ def generate_qrcode():
         
         # 生成带session_id、file_id的支付页面URL
         # 使用中间页面，避免微信直接拦截支付宝链接
-        pay_url = f"http://192.168.100.174:5000/mobile_payment_simple?session_id={session_id}"
+        pay_url = f"https://e-doc-sharing-system.vercel.app/mobile_payment_simple?session_id={session_id}"
         if file_id:
             pay_url += f"&file_id={file_id}"
         
