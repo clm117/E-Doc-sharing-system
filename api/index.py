@@ -8,13 +8,13 @@ def handler(event, context=None):
     # 根据路径返回不同的HTML文件
     if not path or path == 'index':
         # 返回首页
-        return get_html_response('templates/index.html')
+        return get_html_response('public/index.html')
     elif path == 'payment_success':
         # 返回支付成功页面
-        return get_html_response('templates/payment_success.html')
-    elif path == 'mobile_payment_simple':
-        # 返回移动端支付页面
-        return get_html_response('templates/mobile_payment_simple.html')
+        return get_html_response('public/payment_success.html')
+    elif path == 'payment':
+        # 返回支付页面
+        return get_html_response('public/payment.html')
     else:
         # 返回404页面
         return {
