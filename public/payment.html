@@ -1,0 +1,83 @@
+<!DOCTYPE html> <!-- HTML5文档声明 -->
+<html lang="zh-CN"> <!-- 根标签，设置语言为中文 -->
+<head> <!-- 头部标签，包含页面元数据 -->
+    <meta charset="UTF-8"> <!-- 元标签：设置字符编码为UTF-8 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- 元标签：设置视口，适配移动设备 -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"> <!-- 元标签：设置IE浏览器渲染模式，优先使用最新版本或Chrome内核 -->
+    <title>支付页面</title> <!-- 页面标题 -->
+    <style type="text/css"> <!-- CSS样式开始标签 -->
+        * { /* 全局选择器，重置所有元素的默认样式 */
+            margin: 0; /* 清除外边距 */
+            padding: 0; /* 清除内边距 */
+            box-sizing: border-box; /* 使用border-box盒模型，元素宽度包括边框和内边距 */
+        }
+        
+        body { /* 页面主体样式 */
+            font-family: "Microsoft YaHei", Arial, sans-serif; /* 设置字体，优先使用微软雅黑 */
+            background-color: #f5f5f5; /* 设置页面背景色为浅灰色 */
+            text-align: center; /* 页面文本居中对齐 */
+            padding: 20px; /* 设置页面内边距为20px */
+            color: #333333; /* 设置全局文字颜色为深灰色 */
+        }
+        
+        .container { /* 容器样式，用于包裹页面主要内容 */
+            max-width: 400px; /* 设置容器最大宽度为400px */
+            margin: 0 auto; /* 容器水平居中 */
+            background-color: white; /* 容器背景色为白色 */
+            padding: 30px; /* 容器内边距为30px */
+            border-radius: 10px; /* 容器圆角为10px */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); /* 容器添加阴影效果 */
+        }
+        
+        h1 { /* 标题样式 */
+            color: #000000; /* 标题文字颜色为黑色 */
+            margin-bottom: 20px; /* 标题底部外边距为20px */
+            font-size: 24px; /* 标题字体大小为24px */
+            font-weight: bold; /* 标题字体加粗 */
+        }
+        
+        .payment-info { /* 支付说明文字样式 */
+            font-size: 16px; /* 字体大小为16px */
+            margin-bottom: 30px; /* 底部外边距为30px */
+            line-height: 1.5; /* 行高为1.5倍 */
+        }
+        
+        .qr-code { /* 二维码容器样式 */
+            margin: 30px 0; /* 上下外边距为30px */
+        }
+        
+        .qr-code img { /* 二维码图片样式 */
+            width: 200px; /* 图片宽度为200px */
+            height: 200px; /* 图片高度为200px */
+        }
+        
+        .btn { /* 按钮样式 */
+            display: inline-block; /* 设置为行内块元素 */
+            padding: 12px 30px; /* 按钮内边距为12px 30px */
+            font-size: 16px; /* 按钮文字大小为16px */
+            color: white; /* 按钮文字颜色为白色 */
+            background-color: #007bff; /* 按钮背景色为蓝色 */
+            border: none; /* 按钮无边框 */
+            border-radius: 5px; /* 按钮圆角为5px */
+            cursor: pointer; /* 鼠标悬停时显示手型指针 */
+            text-decoration: none; /* 按钮文字无下划线 */
+        }
+        
+        .btn:hover { /* 按钮悬停样式 */
+            background-color: #0056b3; /* 悬停时背景色变为深蓝色 */
+        }
+    </style> <!-- CSS样式结束标签 -->
+</head> <!-- 头部标签结束 -->
+<body> <!-- 页面主体开始标签 -->
+    <div class="container"> <!-- 容器开始 -->
+        <h1>请完成支付</h1> <!-- 页面标题 -->
+        <p class="payment-info">点击按钮完成支付，支付成功后返回原页面查看学习资料密码。</p> <!-- 支付说明文字 -->
+        
+        <p style="margin-bottom: 20px; font-size: 16px; color: #333; font-weight: bold;">支付金额：¥{{ amount }}</p> <!-- 支付金额信息，使用动态变量 -->
+        
+        <a href="#" class="btn">点击支付</a> <!-- 支付按钮，使用a标签实现 -->
+        
+        <a href="javascript:alert('QQ：29344161')" class="btn" style="margin-top: 15px; background-color: #6c757d;">联系商家</a> <!-- 联系商家按钮，使用a标签实现 -->
+    </div> <!-- 容器结束 -->
+</body> <!-- 页面主体结束标签 -->
+</html> <!-- HTML标签结束 -->
